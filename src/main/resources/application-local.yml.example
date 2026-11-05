@@ -6,7 +6,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/biw
     username: postgres
-    password: postgres
+    password: CHANGE_ME
   data:
     redis:
       host: localhost
