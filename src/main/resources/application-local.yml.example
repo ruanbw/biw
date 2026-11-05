@@ -1,0 +1,15 @@
+# Copy this file to application-local.yml (git-ignored) and adjust.
+# It overrides dev/test/prod values on your own machine only.
+#   cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
+# Run with:  --spring.profiles.active=local  or  SPRING_PROFILES_ACTIVE=local
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/biw
+    username: postgres
+    password: postgres
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0

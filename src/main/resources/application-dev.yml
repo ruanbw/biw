@@ -1,0 +1,40 @@
+# Development environment: local PostgreSQL + Redis, verbose logging.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/biw
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: biw-hikari
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+sa-token:
+  is-log: true
+
+logging:
+  level:
+    com.biw: debug
+    org.springframework.web: debug
+    org.springframework.jdbc.core: debug

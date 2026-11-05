@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------
+# Shared configuration. Environment-specific values live in
+# application-{dev,test,prod}.yml and application-local.yml
+# (local is git-ignored; start from application-local.yml.example).
+# ---------------------------------------------------------------
+spring:
+  application:
+    name: biw
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+# ---------------------------------------------------------------
+# MyBatis-Plus
+# ---------------------------------------------------------------
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.biw.**.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    call-setters-on-nulls: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ---------------------------------------------------------------
+# Sa-Token
+# Sessions are persisted in Redis (see sa-token-redis-template).
+# ---------------------------------------------------------------
+sa-token:
+  token-name: satoken
+  # 30 days
+  timeout: 2592000
+  # -1 = never expire while active
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-print: false
+  is-log: false
