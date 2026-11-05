@@ -107,6 +107,8 @@
         </root>
         <logger name="org.mybatis" level="WARN"/>
         <logger name="org.apache.ibatis" level="WARN"/>
+        <!-- Sa-Token prints its plugin banner at INFO on startup; keep prod quiet. -->
+        <logger name="cn.dev33.satoken" level="WARN"/>
     </springProfile>
 
     <!-- No profile selected. -->
