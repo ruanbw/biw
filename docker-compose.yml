@@ -1,0 +1,50 @@
+# Local PostgreSQL + Redis for development.
+#
+#   docker compose up -d
+#   docker compose ps          # wait for both to become healthy
+#   docker compose down        # stop (data stays in the named volumes)
+#   docker compose down -v     # stop and wipe data
+#
+# Credentials match src/main/resources/application-dev.yml defaults.
+# Ports are bound to 127.0.0.1 on purpose: nothing is exposed to the LAN.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: biw-postgres
+    environment:
+      POSTGRES_DB: biw
+      POSTGRES_USER: biw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - biw-pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biw -d biw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: biw-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - biw-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  biw-pgdata:
+  biw-redisdata:
