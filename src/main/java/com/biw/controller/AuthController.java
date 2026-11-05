@@ -2,6 +2,8 @@ package com.biw.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.biw.common.api.Result;
+import com.biw.common.exception.BizException;
+import com.biw.common.exception.ErrorCode;
 import com.biw.controller.dto.LoginRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,7 +37,7 @@ public class AuthController {
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
         if (!demoUsername.equals(request.username()) || !demoPassword.equals(request.password())) {
-            return Result.fail(401, "用户名或密码错误");
+            throw new BizException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
         }
         StpUtil.login(request.username());
         return Result.ok(Map.of(
