@@ -3,7 +3,6 @@ package com.biw.controller;
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.biw.common.api.PageResult;
 import com.biw.common.api.Result;
-import com.biw.common.exception.BizException;
 import com.biw.config.OpenApiConfig;
 import com.biw.entity.user.dto.BatchIdsRequest;
 import com.biw.entity.user.dto.CreateUserRequest;
@@ -18,7 +17,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -64,11 +62,7 @@ public class UserController {
     @GetMapping("/{id}")
     public Result<SysUser> get(
             @Parameter(description = "用户 ID", example = "1") @PathVariable Long id) {
-        SysUser user = userService.getById(id);
-        if (user == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
-        }
-        return Result.ok(user);
+        return Result.ok(userService.get(id));
     }
 
     @Operation(summary = "创建用户", description = "用户名不区分大小写且必须唯一。")

@@ -88,6 +88,15 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     }
 
     @Override
+    public SysUser get(Long id) {
+        SysUser user = getById(id);
+        if (user == null) {
+            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+        }
+        return user;
+    }
+
+    @Override
     public PageResult<SysUser> listPage(long page, long size, String keyword) {
         Page<SysUser> result = page(
                 new Page<>(Math.max(page, 1), Math.min(Math.max(size, 1), 100)),
@@ -132,10 +141,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     @Override
     @Transactional
     public SysUser update(Long id, UpdateUserRequest request) {
-        SysUser user = getById(id);
-        if (user == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
-        }
+        SysUser user = get(id);
 
         Long me = StpUtil.getLoginIdAsLong();
         boolean roleChanged = request.role() != null && request.role() != user.getRole();
