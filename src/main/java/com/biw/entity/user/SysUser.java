@@ -36,10 +36,10 @@ public class SysUser {
     @TableLogic
     private Integer deleted;
 
-    @Schema(description = "创建时间", example = "2026-01-01 12:00:00")
+    @Schema(description = "创建时间", example = "2026-01-01T12:00:00+08:00")
     private OffsetDateTime createdAt;
 
-    @Schema(description = "更新时间", example = "2026-01-01 12:00:00")
+    @Schema(description = "更新时间", example = "2026-01-01T12:00:00+08:00")
     private OffsetDateTime updatedAt;
 
     public Long getId() {

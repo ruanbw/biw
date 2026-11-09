@@ -9,9 +9,8 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   jackson:
+    # Omits nulls from responses; Result.data opts back in with @JsonInclude(ALWAYS).
     default-property-inclusion: non_null
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: Asia/Shanghai
 
 server:
   port: ${SERVER_PORT:8080}
