@@ -25,11 +25,16 @@ server:
 # OpenAPI 3 / Swagger UI
 # http://localhost:8080/swagger-ui.html
 # http://localhost:8080/v3/api-docs
+#
+# Off unless a profile turns it on: a deployment that forgets to set its
+# profile must not publish the API contract. dev and test enable it.
 # ---------------------------------------------------------------
 springdoc:
   api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: method

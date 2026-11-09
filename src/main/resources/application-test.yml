@@ -24,6 +24,13 @@ spring:
           max-idle: 8
           min-idle: 2
 
+# API docs are needed by OpenApiDocsTest.
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
 logging:
   level:
     com.biw: info

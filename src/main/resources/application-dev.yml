@@ -33,6 +33,12 @@ mybatis-plus:
 sa-token:
   is-log: true
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
 logging:
   level:
     com.biw: debug
