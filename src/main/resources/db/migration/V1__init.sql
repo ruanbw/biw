@@ -1,6 +1,8 @@
--- Runs once, on first start of an empty PostgreSQL volume.
--- The database itself (biw) and the role (biw) are created by the
--- official image through POSTGRES_DB / POSTGRES_USER.
+-- V1: initial schema. Applied once by Flyway on application start and recorded in
+-- flyway_schema_history; every later change is a new V<n>__*.sql file next to this one.
+--
+-- The database (biw) and the role (biw) are created by the official PostgreSQL
+-- image through POSTGRES_DB / POSTGRES_USER.
 
 -- gen_random_uuid(), digest(), ...
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
