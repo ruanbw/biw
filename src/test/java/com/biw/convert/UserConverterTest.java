@@ -31,6 +31,15 @@ class UserConverterTest {
     }
 
     @Test
+    void takesTheUsernameFromTheParameterNotFromTheRequest() {
+        // The service normalizes the username before mapping; a raw uppercase value must not win.
+        SysUser user = converter.toEntity(
+                new CreateUserRequest("Bob", "raw-password", null, null, null), "bob", "hash");
+
+        assertThat(user.getUsername()).isEqualTo("bob");
+    }
+
+    @Test
     void keepsExplicitFieldsAndTrimsNickname() {
         SysUser user = converter.toEntity(
                 new CreateUserRequest("bob", "raw-password", "  Bob  ", UserRole.ADMIN, UserStatus.DISABLED),
