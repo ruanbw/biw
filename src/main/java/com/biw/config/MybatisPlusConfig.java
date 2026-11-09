@@ -17,7 +17,7 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        // Page number and size are clamped in UserServiceImpl, so one ceiling lives there.
+        // Page number and size are clamped in the list services, so one ceiling lives there.
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
         return interceptor;
     }
