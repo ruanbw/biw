@@ -96,7 +96,10 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                                 .like(SysUser::getUsername, keyword)
                                 .or()
                                 .like(SysUser::getNickname, keyword))
-                        .orderByDesc(SysUser::getCreatedAt));
+                        .orderByDesc(SysUser::getCreatedAt)
+                        // Tiebreaker: rows created in the same millisecond have no stable order in
+                        // PostgreSQL, so LIMIT/OFFSET paging could show one twice and skip another.
+                        .orderByDesc(SysUser::getId));
         return new PageResult<>(
                 result.getRecords(),
                 result.getTotal(),
