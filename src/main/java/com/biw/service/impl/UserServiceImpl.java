@@ -122,7 +122,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if ((roleChanged || disabling)
                 && "ADMIN".equals(user.getRole())
                 && Integer.valueOf(1).equals(user.getStatus())
-                && countActiveAdmins() <= 1) {
+                && countActiveAdminsForUpdate() <= 1) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "At least one active administrator must remain");
         }
@@ -170,12 +170,11 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         long deletingAdmins = users.stream()
                 .filter(u -> "ADMIN".equals(u.getRole()) && Integer.valueOf(1).equals(u.getStatus()))
                 .count();
-        if (deletingAdmins > 0 && countActiveAdmins() - deletingAdmins < 1) {
+        if (deletingAdmins > 0 && countActiveAdminsForUpdate() - deletingAdmins < 1) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "At least one active administrator must remain");
         }
 
-        // shortcut: admin count check is not locked; fine for one instance, add a lock for multiple instances
         removeByIds(distinct);
         distinct.forEach(id -> StpUtil.logout(id));
     }
@@ -195,10 +194,20 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         StpUtil.logout(id);
     }
 
-    private long countActiveAdmins() {
-        return count(Wrappers.<SysUser>lambdaQuery()
+    /**
+     * Counts enabled admins and locks their rows until the transaction ends. Without the lock two
+     * concurrent requests can each see two admins and then remove one, leaving no admin at all —
+     * a state the API can never recover from. {@code ORDER BY id} keeps the lock order identical
+     * for every caller, so the two cannot deadlock.
+     */
+    private long countActiveAdminsForUpdate() {
+        return list(Wrappers.<SysUser>lambdaQuery()
+                .select(SysUser::getId)
                 .eq(SysUser::getRole, "ADMIN")
-                .eq(SysUser::getStatus, 1));
+                .eq(SysUser::getStatus, 1)
+                .orderByAsc(SysUser::getId)
+                .last("FOR UPDATE"))
+                .size();
     }
 
     private static String normalize(String username) {
