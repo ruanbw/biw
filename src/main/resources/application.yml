@@ -50,6 +50,8 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     cache-enabled: false
     call-setters-on-nulls: true
+    # Binds state enums to the native PostgreSQL enum types (user_status, role_status).
+    default-enum-type-handler: com.biw.common.mybatis.PostgresEnumTypeHandler
   global-config:
     banner: false
     db-config:

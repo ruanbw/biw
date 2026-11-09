@@ -7,6 +7,33 @@
 -- image through POSTGRES_DB / POSTGRES_USER.
 
 -- ---------------------------------------------------------------------------
+-- Enum types
+-- ---------------------------------------------------------------------------
+-- State columns are native enum types, not VARCHAR plus a CHECK: the value set
+-- is then a real type, so `\dT` lists it, a typo is rejected before it reaches
+-- a row, and the values cannot drift between tables. The Java enums
+-- (UserStatus, RoleStatus) carry the same names, and PostgresEnumTypeHandler
+-- binds them by name.
+--
+-- CREATE TYPE has no IF NOT EXISTS, so a DO block keeps the file re-runnable.
+-- Adding a value later is `ALTER TYPE ... ADD VALUE`; removing or renaming one
+-- means recreating the type and rewriting the column, which is the price of
+-- having the value set in the database instead of in a CHECK.
+DO $$
+BEGIN
+    CREATE TYPE user_status AS ENUM ('ENABLED', 'DISABLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END
+$$;
+
+DO $$
+BEGIN
+    CREATE TYPE role_status AS ENUM ('ENABLED', 'DISABLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END
+$$;
+
+-- ---------------------------------------------------------------------------
 -- sys_user
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sys_user (
@@ -14,14 +41,13 @@ CREATE TABLE IF NOT EXISTS sys_user (
     username      VARCHAR(64)  NOT NULL,
     password_hash VARCHAR(100) NOT NULL,
     nickname      VARCHAR(64)  NOT NULL DEFAULT '',
-    status        VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
+    status        user_status  NOT NULL DEFAULT 'ENABLED',
     deleted       SMALLINT     NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     CONSTRAINT pk_sys_user PRIMARY KEY (id),
     CONSTRAINT ck_sys_user_username CHECK (username = lower(username)),
-    CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
     CONSTRAINT ck_sys_user_deleted CHECK (deleted IN (0, 1))
 );
 
@@ -38,7 +64,7 @@ CREATE TABLE IF NOT EXISTS sys_role (
     code        VARCHAR(32)  NOT NULL,
     name        VARCHAR(64)  NOT NULL,
     description VARCHAR(255) NOT NULL DEFAULT '',
-    status      VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
+    status      role_status  NOT NULL DEFAULT 'ENABLED',
     built_in    BOOLEAN      NOT NULL DEFAULT FALSE,
     deleted     SMALLINT     NOT NULL DEFAULT 0,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -46,7 +72,6 @@ CREATE TABLE IF NOT EXISTS sys_role (
 
     CONSTRAINT pk_sys_role PRIMARY KEY (id),
     CONSTRAINT ck_sys_role_code CHECK (code ~ '^[A-Z][A-Z0-9_]{0,31}$'),
-    CONSTRAINT ck_sys_role_status CHECK (status IN ('ENABLED', 'DISABLED')),
     CONSTRAINT ck_sys_role_deleted CHECK (deleted IN (0, 1))
 );
 
