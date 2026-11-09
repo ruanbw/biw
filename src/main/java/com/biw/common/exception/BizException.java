@@ -1,31 +1,29 @@
 package com.biw.common.exception;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * Exception for expected, client-facing failures.
  * Handled by {@link GlobalExceptionHandler}, never logged as a server error.
  */
 public class BizException extends RuntimeException {
 
-    private final ErrorCode errorCode;
+    private final HttpStatus status;
 
     public BizException(String message) {
-        this(ErrorCode.BAD_REQUEST, message);
+        this(HttpStatus.BAD_REQUEST, message);
     }
 
-    public BizException(ErrorCode errorCode) {
-        this(errorCode, errorCode.getMessage());
+    public BizException(HttpStatus status) {
+        this(status, status.getReasonPhrase());
     }
 
-    public BizException(ErrorCode errorCode, String message) {
+    public BizException(HttpStatus status, String message) {
         super(message);
-        this.errorCode = errorCode;
+        this.status = status;
     }
 
-    public ErrorCode getErrorCode() {
-        return errorCode;
-    }
-
-    public int getCode() {
-        return errorCode.getCode();
+    public HttpStatus getStatus() {
+        return status;
     }
 }

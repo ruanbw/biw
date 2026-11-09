@@ -1,5 +1,7 @@
 package com.biw.common.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * Envelope for every JSON response.
  *
@@ -7,7 +9,8 @@ package com.biw.common.api;
  * @param message human readable message
  * @param data    payload, may be {@code null}
  */
-public record Result<T>(int code, String message, T data) {
+public record Result<T>(int code, String message,
+                        @JsonInclude(JsonInclude.Include.ALWAYS) T data) {
 
     public static final int SUCCESS = 0;
 
