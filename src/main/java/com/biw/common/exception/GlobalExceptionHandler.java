@@ -4,6 +4,7 @@ import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.exception.NotRoleException;
 import com.biw.common.api.Result;
+import com.biw.common.audit.SecurityAudit;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolationException;
@@ -27,6 +28,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -40,9 +42,20 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /** Statuses that are refused requests rather than malformed ones, and are audited. */
+    private static final Set<HttpStatus> AUDITED =
+            Set.of(HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN, HttpStatus.TOO_MANY_REQUESTS);
+
     @ExceptionHandler(BizException.class)
     public ResponseEntity<Result<Void>> handleBizException(BizException ex) {
-        log.debug("business exception: {}", ex.getMessage());
+        // 401 / 403 / 429 are security events, not routine client errors: they have to survive
+        // into a production log, where everything else here is below the threshold.
+        if (AUDITED.contains(ex.getStatus())) {
+            SecurityAudit.failure("request.refused",
+                    "status=" + ex.getStatus().value() + " " + ex.getMessage());
+        } else {
+            log.debug("business exception: {}", ex.getMessage());
+        }
         return build(ex.getStatus(), ex.getMessage());
     }
 
@@ -165,16 +178,19 @@ public class GlobalExceptionHandler {
             case NotLoginException.KICK_OUT -> "Account has been kicked out";
             default -> HttpStatus.UNAUTHORIZED.getReasonPhrase();
         };
+        SecurityAudit.failure("auth.token.rejected", "sys=" + ex.getType() + " " + message);
         return build(HttpStatus.UNAUTHORIZED, message);
     }
 
     @ExceptionHandler(NotRoleException.class)
     public ResponseEntity<Result<Void>> handleNotRole(NotRoleException ex) {
+        SecurityAudit.failure("auth.role.denied", "role=" + ex.getRole());
         return build(HttpStatus.FORBIDDEN, "Missing role: " + ex.getRole());
     }
 
     @ExceptionHandler(NotPermissionException.class)
     public ResponseEntity<Result<Void>> handleNotPermission(NotPermissionException ex) {
+        SecurityAudit.failure("auth.permission.denied", "permission=" + ex.getPermission());
         return build(HttpStatus.FORBIDDEN, "Missing permission: " + ex.getPermission());
     }
 
