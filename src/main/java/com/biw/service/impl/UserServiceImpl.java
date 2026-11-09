@@ -128,12 +128,23 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
 
         userConverter.applyUpdate(request, user);
-        updateById(user);
+        // Write only the fields that were sent: writing the whole row back would undo a concurrent
+        // password reset or delete, because those changes happened after this row was read.
+        boolean updated = lambdaUpdate()
+                .eq(SysUser::getId, id)
+                .set(request.nickname() != null, SysUser::getNickname, user.getNickname())
+                .set(request.role() != null, SysUser::getRole, user.getRole())
+                .set(request.status() != null, SysUser::getStatus, user.getStatus())
+                .set(SysUser::getUpdatedAt, user.getUpdatedAt())
+                .update();
+        if (!updated) {
+            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+        }
 
         if (disabling) {
             StpUtil.logout(id);
         }
-        return getById(id);
+        return user;
     }
 
     @Override
@@ -172,14 +183,15 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     @Override
     @Transactional
     public void resetPassword(Long id, ResetPasswordRequest request) {
-        SysUser user = getById(id);
-        if (user == null) {
+        checkPasswordBytes(request.newPassword());
+        boolean updated = lambdaUpdate()
+                .eq(SysUser::getId, id)
+                .set(SysUser::getPasswordHash, passwordEncoder.encode(request.newPassword()))
+                .set(SysUser::getUpdatedAt, OffsetDateTime.now())
+                .update();
+        if (!updated) {
             throw new BizException(HttpStatus.NOT_FOUND, "User not found");
         }
-        checkPasswordBytes(request.newPassword());
-        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        user.setUpdatedAt(OffsetDateTime.now());
-        updateById(user);
         StpUtil.logout(id);
     }
 
