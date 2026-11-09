@@ -17,13 +17,8 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-
-        PaginationInnerInterceptor pagination = new PaginationInnerInterceptor(DbType.POSTGRE_SQL);
-        // Hard ceiling so a client cannot ask for a million rows.
-        pagination.setMaxLimit(500L);
-        pagination.setOverflow(false);
-        interceptor.addInnerInterceptor(pagination);
-
+        // Page number and size are clamped in UserServiceImpl, so one ceiling lives there.
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
         return interceptor;
     }
 }
