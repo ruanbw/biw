@@ -11,7 +11,7 @@ public record LoginRequest(
         @Size(max = 64, message = "Username must not exceed 64 characters")
         String username,
 
-        @Schema(description = "密码", example = "Passw0rd!")
+        @Schema(description = "密码，UTF-8 编码后不超过 72 字节", example = "Passw0rd!")
         @NotBlank(message = "Password must not be blank")
         @Size(min = 6, max = 128, message = "Password must be between 6 and 128 characters")
         String password

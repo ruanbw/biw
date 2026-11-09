@@ -57,6 +57,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     @Override
     public LoginVO login(LoginRequest request) {
+        // An over-long password cannot belong to any account (create and reset cap it too), and
+        // BCrypt silently ignores bytes past 72, so reject it instead of comparing a prefix.
+        checkPasswordBytes(request.password());
         String username = normalize(request.username());
         assertNotLocked(username);
 
