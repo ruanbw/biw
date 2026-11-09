@@ -5,32 +5,42 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
 
+@Schema(description = "用户信息")
 @TableName("sys_user")
 public class SysUser {
 
+    @Schema(description = "用户 ID", example = "1")
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @Schema(description = "用户名", example = "alice")
     private String username;
 
     @JsonIgnore
     private String passwordHash;
 
+    @Schema(description = "昵称", example = "爱丽丝")
     private String nickname;
 
+    @Schema(description = "角色：ADMIN 管理员，USER 普通用户", example = "USER",
+            allowableValues = {"ADMIN", "USER"})
     private String role;
 
+    @Schema(description = "状态：1 启用，0 禁用", example = "1")
     private Integer status;
 
     @JsonIgnore
     @TableLogic
     private Integer deleted;
 
+    @Schema(description = "创建时间", example = "2026-01-01 12:00:00")
     private OffsetDateTime createdAt;
 
+    @Schema(description = "更新时间", example = "2026-01-01 12:00:00")
     private OffsetDateTime updatedAt;
 
     public Long getId() {

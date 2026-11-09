@@ -3,6 +3,7 @@ package com.biw.controller;
 import com.biw.common.api.Result;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Ensures container-level errors also use the {@link Result} envelope.
+ * Hidden from the OpenAPI document: it is an internal fallback, not a callable API.
  */
+@Hidden
 @RestController
 public class ApiErrorController implements ErrorController {
 

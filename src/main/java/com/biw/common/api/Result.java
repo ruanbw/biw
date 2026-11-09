@@ -1,6 +1,7 @@
 package com.biw.common.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Envelope for every JSON response.
@@ -9,8 +10,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param message human readable message
  * @param data    payload, may be {@code null}
  */
-public record Result<T>(int code, String message,
-                        @JsonInclude(JsonInclude.Include.ALWAYS) T data) {
+@Schema(description = "统一响应结构")
+public record Result<T>(
+        @Schema(description = "业务状态码，0 表示成功", example = "0") int code,
+        @Schema(description = "提示信息，失败时为具体原因", example = "ok") String message,
+        @JsonInclude(JsonInclude.Include.ALWAYS)
+        @Schema(description = "业务数据，失败时为 null") T data) {
 
     public static final int SUCCESS = 0;
 

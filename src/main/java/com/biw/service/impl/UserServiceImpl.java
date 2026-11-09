@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.biw.common.api.PageResult;
 import com.biw.common.exception.BizException;
 import com.biw.convert.UserConverter;
 import com.biw.entity.user.dto.CreateUserRequest;
@@ -25,7 +26,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 
 @Service
@@ -64,7 +64,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     }
 
     @Override
-    public Map<String, Object> listPage(long page, long size, String keyword) {
+    public PageResult<SysUser> listPage(long page, long size, String keyword) {
         Page<SysUser> result = page(
                 new Page<>(Math.max(page, 1), Math.min(Math.max(size, 1), 100)),
                 Wrappers.<SysUser>lambdaQuery()
@@ -73,12 +73,12 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                                 .or()
                                 .like(SysUser::getNickname, keyword))
                         .orderByDesc(SysUser::getCreatedAt));
-        return Map.of(
-                "records", result.getRecords(),
-                "total", result.getTotal(),
-                "page", result.getCurrent(),
-                "size", result.getSize(),
-                "pages", result.getPages());
+        return new PageResult<>(
+                result.getRecords(),
+                result.getTotal(),
+                result.getCurrent(),
+                result.getSize(),
+                result.getPages());
     }
 
     @Override
