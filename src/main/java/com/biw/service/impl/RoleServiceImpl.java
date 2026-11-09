@@ -4,6 +4,9 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.biw.common.api.PageBounds;
+import com.biw.common.api.OptionQuery;
+import com.biw.common.api.OptionVO;
 import com.biw.common.api.PageResult;
 import com.biw.common.exception.BizException;
 import com.biw.entity.rbac.PermissionCodes;
@@ -52,11 +55,9 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
 
     @Override
     public PageResult<SysRole> listPage(long page, long size, String keyword) {
+        PageBounds bounds = PageBounds.of(page, size);
         Page<SysRole> result = page(
-                // The upper bound matters: a huge page overflows the offset, and a very large
-                // one still asks PostgreSQL to walk that many rows before returning nothing.
-                new Page<>(Math.min(Math.max(page, 1), 100_000),
-                        Math.min(Math.max(size, 1), 100)),
+                new Page<>(bounds.page(), bounds.size()),
                 Wrappers.<SysRole>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
                                 .like(SysRole::getCode, keyword)
@@ -72,6 +73,22 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                 result.getCurrent(),
                 result.getSize(),
                 result.getPages());
+    }
+
+    @Override
+    public List<OptionVO> listOptions(String keyword, int limit, List<Long> ids) {
+        if (ids != null) {
+            List<Long> distinct = OptionQuery.distinctIds(ids);
+            if (distinct.isEmpty()) {
+                return List.of();
+            }
+            return baseMapper.selectOptionsByIds(distinct).stream()
+                    .map(RoleServiceImpl::toOption)
+                    .toList();
+        }
+        return baseMapper.selectOptions(OptionQuery.pattern(keyword), OptionQuery.limit(limit)).stream()
+                .map(RoleServiceImpl::toOption)
+                .toList();
     }
 
     @Override
@@ -115,8 +132,12 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     }
 
     @Override
+    @Transactional
     public SysRole update(Long id, UpdateRoleRequest request) {
-        SysRole role = require(id);
+        // Locked like delete and assignPermissions: the delegation ceiling below reads the role's
+        // current permissions, so a concurrent replacement must not land between that read and
+        // this write.
+        SysRole role = requireForUpdate(id);
         RoleGuards.checkUpdate(role, request.status());
         checkCanModifyRole(role);
 
