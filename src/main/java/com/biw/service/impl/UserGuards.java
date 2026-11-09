@@ -49,7 +49,7 @@ final class UserGuards {
         }
     }
 
-    static boolean isActiveAdmin(SysUser user) {
+    private static boolean isActiveAdmin(SysUser user) {
         return user.getRole() == UserRole.ADMIN && user.getStatus() == UserStatus.ENABLED;
     }
 }
