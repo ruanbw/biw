@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -85,6 +87,23 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         log.debug("unreadable request body: {}", ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body");
+    }
+
+    /** Body sent with a {@code Content-Type} no converter can read, e.g. {@code text/plain} on a JSON endpoint. */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<Result<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        String contentType = ex.getContentType() == null ? "unknown" : ex.getContentType().toString();
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type: " + contentType);
+    }
+
+    /**
+     * The client refuses every media type we can produce. No body is written on purpose:
+     * whatever we send would be refused for the same reason.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<Void> handleMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+        log.debug("no acceptable response media type: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
