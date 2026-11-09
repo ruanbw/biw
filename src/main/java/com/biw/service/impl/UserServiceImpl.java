@@ -4,8 +4,11 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.biw.common.api.PageBounds;
 import com.biw.common.api.PageResult;
+import com.biw.common.audit.SecurityAudit;
 import com.biw.common.exception.BizException;
+import com.biw.common.web.ClientAddress;
 import com.biw.convert.UserConverter;
 import com.biw.entity.rbac.PermissionCodes;
 import com.biw.entity.rbac.RoleCodes;
@@ -26,8 +29,6 @@ import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashSet;
@@ -45,31 +45,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
-    /** Failed logins allowed per account before it is locked for {@link #LOGIN_LOCK}. */
-    private static final int MAX_LOGIN_FAILURES = 10;
-    private static final Duration LOGIN_LOCK = Duration.ofMinutes(5);
-    private static final String LOGIN_FAIL_KEY_PREFIX = "biw:login:fail:";
-    /**
-     * Increments the failure counter, sets the window once, and heals a key an older build left
-     * without a TTL. Two commands would leave that key behind when the process dies between them.
-     */
-    private static final RedisScript<Long> RECORD_FAILURE_SCRIPT = new DefaultRedisScript<>("""
-            local count = redis.call('INCR', KEYS[1])
-            if count == 1 or redis.call('TTL', KEYS[1]) < 0 then
-                redis.call('EXPIRE', KEYS[1], ARGV[1])
-            end
-            return count
-            """, Long.class);
 
     private final PasswordEncoder passwordEncoder;
     private final UserConverter userConverter;
-    private final StringRedisTemplate redis;
+    private final LoginThrottle loginThrottle;
     private final SysRoleMapper roleMapper;
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
@@ -83,7 +67,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                            SysUserRoleMapper userRoleMapper, RbacAuthorities rbacAuthorities) {
         this.passwordEncoder = passwordEncoder;
         this.userConverter = userConverter;
-        this.redis = redis;
+        this.loginThrottle = new LoginThrottle(redis);
         this.roleMapper = roleMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.userRoleMapper = userRoleMapper;
@@ -97,7 +81,13 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         // BCrypt silently ignores bytes past 72, so reject it instead of comparing a prefix.
         checkPasswordBytes(request.password());
         String username = normalize(request.username());
-        assertNotLocked(username);
+        String clientAddress = ClientAddress.current();
+        try {
+            loginThrottle.check(username, clientAddress);
+        } catch (BizException e) {
+            SecurityAudit.failure("auth.login.locked", "username=" + username);
+            throw e;
+        }
 
         SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
         boolean enabled = user != null && user.getStatus() == UserStatus.ENABLED;
@@ -107,11 +97,15 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean passwordMatches = passwordEncoder.matches(request.password(),
                 enabled ? user.getPasswordHash() : dummyPasswordHash);
         if (!enabled || !passwordMatches) {
-            recordFailure(username, user != null);
+            loginThrottle.record(username, clientAddress);
+            SecurityAudit.failure("auth.login.failed", "username=" + username + " reason="
+                    + (user == null ? "unknown-account" : enabled ? "wrong-password" : "disabled-account"));
             throw new BizException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
-        redis.delete(LOGIN_FAIL_KEY_PREFIX + username);
+        // Only the account bucket: a successful login proves ownership of that name, but a caller
+        // must not be able to reset its own client bucket by logging into an account it owns.
+        loginThrottle.clear(username);
         StpUtil.login(user.getId());
         return new LoginVO(StpUtil.getTokenName(), StpUtil.getTokenValue(),
                 StpUtil.getTokenTimeout(), withRoleCodes(user));
@@ -137,11 +131,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     @Override
     public PageResult<SysUser> listPage(long page, long size, String keyword) {
+        PageBounds bounds = PageBounds.of(page, size);
         Page<SysUser> result = page(
-                // The upper bound matters: a huge page overflows the offset, and a very large
-                // one still asks PostgreSQL to walk that many rows before returning nothing.
-                new Page<>(Math.min(Math.max(page, 1), 100_000),
-                        Math.min(Math.max(size, 1), 100)),
+                new Page<>(bounds.page(), bounds.size()),
                 Wrappers.<SysUser>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
                                 .like(SysUser::getUsername, keyword)
@@ -414,34 +406,5 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (password != null && password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new BizException(HttpStatus.BAD_REQUEST, "Password must not exceed 72 bytes");
         }
-    }
-
-    private void assertNotLocked(String username) {
-        String key = LOGIN_FAIL_KEY_PREFIX + username;
-        String failures = redis.opsForValue().get(key);
-        if (failures != null && Long.parseLong(failures) >= MAX_LOGIN_FAILURES) {
-            // An older build could leave a key without a TTL when the process died between INCR
-            // and EXPIRE; without this the account would stay locked forever.
-            Long ttl = redis.getExpire(key, TimeUnit.SECONDS);
-            if (ttl == null || ttl < 0) {
-                redis.expire(key, LOGIN_LOCK);
-            }
-            throw new BizException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many failed login attempts, try again in " + LOGIN_LOCK.toMinutes() + " minutes");
-        }
-    }
-
-    /**
-     * Counts one failed attempt. Only known accounts get a counter, so unknown usernames cannot
-     * fill Redis with keys. The window starts at the first failure and is not extended by later
-     * ones: a rolling window would let anyone who knows a username keep that account locked.
-     */
-    private void recordFailure(String username, boolean knownAccount) {
-        if (!knownAccount) {
-            return;
-        }
-        String key = LOGIN_FAIL_KEY_PREFIX + username;
-        redis.execute(RECORD_FAILURE_SCRIPT, List.of(key),
-                String.valueOf(LOGIN_LOCK.toSeconds()));
     }
 }
