@@ -38,6 +38,9 @@ import static org.mockito.Mockito.when;
  * interceptor, a real token, {@code StpInterfaceImpl}, and the annotation. Without this,
  * flipping {@code SaInterceptor.isAnnotation} off (or losing the {@code StpInterface} bean)
  * would leave every endpoint open to any logged-in user while the rest of the suite stays green.
+ * <p>
+ * It also pins the transport-level guarantees, because they need the same real server: the token
+ * is never turned into a cookie, and every response carries the hardening headers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -107,13 +110,20 @@ class PermissionEnforcementTest {
      * runs inside the request thread, so the token really is written to the session store.
      */
     private String login() throws Exception {
+        HttpResponse<String> response = postLogin();
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        return JsonPath.read(response.body(), "$.data.tokenValue");
+    }
+
+    private HttpResponse<String> postLogin() throws Exception {
         when(userService.login(any(LoginRequest.class))).thenAnswer(invocation -> {
             StpUtil.login(USER_ID);
             return new LoginVO(StpUtil.getTokenName(), StpUtil.getTokenValue(),
                     StpUtil.getTokenTimeout(), null);
         });
 
-        HttpResponse<String> response = client.send(HttpRequest
+        return client.send(HttpRequest
                         .newBuilder(URI.create("http://localhost:" + port + "/api/auth/login"))
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(
@@ -121,9 +131,26 @@ class PermissionEnforcementTest {
                                 StandardCharsets.UTF_8))
                         .build(),
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
 
-        assertThat(response.statusCode()).isEqualTo(200);
-        return JsonPath.read(response.body(), "$.data.tokenValue");
+    /**
+     * A cookie would be attached by the browser to cross-site requests and would be readable by
+     * any script on the origin. {@code is-read-cookie: false} keeps the token in the header only,
+     * which is the only channel the API documents anyway.
+     */
+    @Test
+    void loginDoesNotTurnTheTokenIntoACookie() throws Exception {
+        assertThat(postLogin().headers().allValues("Set-Cookie")).isEmpty();
+    }
+
+    @Test
+    void everyResponseCarriesTheHardeningHeaders() throws Exception {
+        HttpResponse<String> response = get("/api/users", login());
+
+        assertThat(response.headers().firstValue("X-Content-Type-Options")).hasValue("nosniff");
+        assertThat(response.headers().firstValue("X-Frame-Options")).hasValue("DENY");
+        assertThat(response.headers().firstValue("Referrer-Policy")).hasValue("no-referrer");
+        assertThat(response.headers().firstValue("Cache-Control")).hasValue("no-store");
     }
 
     private HttpResponse<String> get(String path, String token) throws Exception {

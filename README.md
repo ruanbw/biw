@@ -6,8 +6,11 @@ Java 21 + Spring Boot 4.1.2 service. PostgreSQL + Redis + MyBatis-Plus + Sa-Toke
 
 ```bash
 docker compose up -d
-mvn spring-boot:run
+SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
 ```
+
+profile 没有默认值：不设置 `SPRING_PROFILES_ACTIVE` 会启动失败，而不是悄悄以 dev 配置跑起来。
+`dev` / `test` / `prod` 之外还有 `local`（个人机器覆盖，`application-local.yml` 不入库）。
 
 接口文档（Swagger UI）：<http://localhost:8080/swagger-ui.html>，OpenAPI JSON 在 `/v3/api-docs`。
 只在 dev / test 打开；其他环境默认关闭，需要时设置 `SPRINGDOC_ENABLED=true`。
