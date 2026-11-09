@@ -7,9 +7,6 @@
 #
 # Credentials match src/main/resources/application-dev.yml defaults.
 # Ports are bound to 127.0.0.1 on purpose: nothing is exposed to the LAN.
-#
-# No schema here: Flyway applies src/main/resources/db/migration when the
-# application starts, so the tables and the code that uses them ship together.
 services:
   postgres:
     image: postgres:18-alpine
@@ -24,6 +21,7 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - biw-pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U biw -d biw"]
       interval: 10s

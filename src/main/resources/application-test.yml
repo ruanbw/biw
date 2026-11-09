@@ -1,8 +1,5 @@
 # Test environment: isolated schema / Redis database, no SQL echo.
 spring:
-  # Unit tests never touch a database, so there is nothing to migrate.
-  flyway:
-    enabled: false
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:biw_test}
     username: ${DB_USERNAME:biw}
