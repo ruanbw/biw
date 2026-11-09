@@ -139,17 +139,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean statusChanged = request.status() != null && request.status() != user.getStatus();
         boolean disabling = statusChanged && request.status() == UserStatus.DISABLED;
 
-        if (id.equals(me) && (roleChanged || disabling)) {
-            throw new BizException(HttpStatus.FORBIDDEN,
-                    "You cannot change your own role or disable yourself");
-        }
-        if ((roleChanged || disabling)
-                && user.getRole() == UserRole.ADMIN
-                && user.getStatus() == UserStatus.ENABLED
-                && countActiveAdminsForUpdate() <= 1) {
-            throw new BizException(HttpStatus.FORBIDDEN,
-                    "At least one active administrator must remain");
-        }
+        UserGuards.checkUpdate(user, me, roleChanged, disabling, this::countActiveAdminsForUpdate);
 
         userConverter.applyUpdate(request, user);
         // Write only the fields that were sent: writing the whole row back would undo a concurrent
@@ -186,18 +176,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
 
         List<SysUser> users = listByIds(distinct);
-        Long me = StpUtil.getLoginIdAsLong();
-        if (users.stream().anyMatch(u -> u.getId().equals(me))) {
-            throw new BizException(HttpStatus.FORBIDDEN, "You cannot delete yourself");
-        }
-
-        long deletingAdmins = users.stream()
-                .filter(u -> u.getRole() == UserRole.ADMIN && u.getStatus() == UserStatus.ENABLED)
-                .count();
-        if (deletingAdmins > 0 && countActiveAdminsForUpdate() - deletingAdmins < 1) {
-            throw new BizException(HttpStatus.FORBIDDEN,
-                    "At least one active administrator must remain");
-        }
+        UserGuards.checkDelete(users, StpUtil.getLoginIdAsLong(), this::countActiveAdminsForUpdate);
 
         removeByIds(distinct);
         distinct.forEach(id -> StpUtil.logout(id));
