@@ -58,13 +58,17 @@ public interface SysUserRoleMapper {
             """)
     List<UserRoleCode> selectRoleCodesByUserIds(@Param("userIds") Collection<Long> userIds);
 
+    /**
+     * Users that still exist and hold the role; disabled accounts count too, so a role cannot
+     * be deleted while a disabled user still points at it.
+     */
     @Select("""
             SELECT COUNT(*)
             FROM sys_user_role ur
             JOIN sys_user u ON u.id = ur.user_id AND u.deleted = 0
             WHERE ur.role_id = #{roleId}
             """)
-    long countActiveUsersByRoleId(@Param("roleId") Long roleId);
+    long countUsersByRoleId(@Param("roleId") Long roleId);
 
     /**
      * Active admins, locked until the transaction ends. Two requests deleting or demoting an

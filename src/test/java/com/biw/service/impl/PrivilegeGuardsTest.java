@@ -77,6 +77,30 @@ class PrivilegeGuardsTest {
     }
 
     @Test
+    void nonAdminCannotEditARoleThatGrantsMorePermissions() {
+        assertThatThrownBy(() -> PrivilegeGuards.checkCanModifyRole(
+                false, List.of(PermissionCodes.ROLE_WRITE),
+                List.of(PermissionCodes.ROLE_WRITE, PermissionCodes.USER_WRITE)))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining(PermissionCodes.USER_WRITE)
+                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void nonAdminMayEditARoleWithinItsOwnPermissions() {
+        assertThatCode(() -> PrivilegeGuards.checkCanModifyRole(
+                false, List.of(PermissionCodes.ROLE_WRITE), List.of(PermissionCodes.ROLE_WRITE)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void adminMayEditAnyRole() {
+        assertThatCode(() -> PrivilegeGuards.checkCanModifyRole(
+                true, List.of(PermissionCodes.ALL_WILDCARD), List.of(PermissionCodes.USER_WRITE)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void adminMayGrantAnything() {
         assertThatCode(() -> PrivilegeGuards.checkCanGrantPermissions(
                 true, List.of(PermissionCodes.ALL_WILDCARD), List.of(PermissionCodes.ROLE_WRITE)))

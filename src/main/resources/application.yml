@@ -62,10 +62,10 @@ mybatis-plus:
 # ---------------------------------------------------------------
 sa-token:
   token-name: satoken
-  # 30 days
-  timeout: 2592000
-  # -1 = never expire while active
-  active-timeout: -1
+  # 7 days absolute
+  timeout: 604800
+  # 30 minutes of inactivity; an idle session is logged out
+  active-timeout: 1800
   is-concurrent: true
   is-share: false
   token-style: uuid

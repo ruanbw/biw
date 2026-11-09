@@ -26,6 +26,8 @@ import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,6 +55,17 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private static final int MAX_LOGIN_FAILURES = 10;
     private static final Duration LOGIN_LOCK = Duration.ofMinutes(5);
     private static final String LOGIN_FAIL_KEY_PREFIX = "biw:login:fail:";
+    /**
+     * Increments the failure counter, sets the window once, and heals a key an older build left
+     * without a TTL. Two commands would leave that key behind when the process dies between them.
+     */
+    private static final RedisScript<Long> RECORD_FAILURE_SCRIPT = new DefaultRedisScript<>("""
+            local count = redis.call('INCR', KEYS[1])
+            if count == 1 or redis.call('TTL', KEYS[1]) < 0 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return count
+            """, Long.class);
 
     private final PasswordEncoder passwordEncoder;
     private final UserConverter userConverter;
@@ -124,7 +138,10 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     @Override
     public PageResult<SysUser> listPage(long page, long size, String keyword) {
         Page<SysUser> result = page(
-                new Page<>(Math.max(page, 1), Math.min(Math.max(size, 1), 100)),
+                // The upper bound matters: a huge page overflows the offset, and a very large
+                // one still asks PostgreSQL to walk that many rows before returning nothing.
+                new Page<>(Math.min(Math.max(page, 1), 100_000),
+                        Math.min(Math.max(size, 1), 100)),
                 Wrappers.<SysUser>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
                                 .like(SysUser::getUsername, keyword)
@@ -400,8 +417,15 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     }
 
     private void assertNotLocked(String username) {
-        String failures = redis.opsForValue().get(LOGIN_FAIL_KEY_PREFIX + username);
+        String key = LOGIN_FAIL_KEY_PREFIX + username;
+        String failures = redis.opsForValue().get(key);
         if (failures != null && Long.parseLong(failures) >= MAX_LOGIN_FAILURES) {
+            // An older build could leave a key without a TTL when the process died between INCR
+            // and EXPIRE; without this the account would stay locked forever.
+            Long ttl = redis.getExpire(key, TimeUnit.SECONDS);
+            if (ttl == null || ttl < 0) {
+                redis.expire(key, LOGIN_LOCK);
+            }
             throw new BizException(HttpStatus.TOO_MANY_REQUESTS,
                     "Too many failed login attempts, try again in " + LOGIN_LOCK.toMinutes() + " minutes");
         }
@@ -409,15 +433,15 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     /**
      * Counts one failed attempt. Only known accounts get a counter, so unknown usernames cannot
-     * fill Redis with keys; every failure pushes the expiry out, so the lock ends five minutes
-     * after the last try.
+     * fill Redis with keys. The window starts at the first failure and is not extended by later
+     * ones: a rolling window would let anyone who knows a username keep that account locked.
      */
     private void recordFailure(String username, boolean knownAccount) {
         if (!knownAccount) {
             return;
         }
         String key = LOGIN_FAIL_KEY_PREFIX + username;
-        redis.opsForValue().increment(key);
-        redis.expire(key, LOGIN_LOCK);
+        redis.execute(RECORD_FAILURE_SCRIPT, List.of(key),
+                String.valueOf(LOGIN_LOCK.toSeconds()));
     }
 }

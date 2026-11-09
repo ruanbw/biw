@@ -66,8 +66,8 @@ class RbacMapperSqlTest {
     }
 
     @Test
-    void countsOnlyActiveUsersForRoleDeletion() {
-        String sql = sql("com.biw.mapper.SysUserRoleMapper.countActiveUsersByRoleId",
+    void countsOnlyExistingUsersForRoleDeletion() {
+        String sql = sql("com.biw.mapper.SysUserRoleMapper.countUsersByRoleId",
                 Map.of("roleId", 1L));
 
         assertThat(sql)

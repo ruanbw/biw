@@ -13,7 +13,9 @@ import java.util.stream.Collectors;
  * The ceiling that stops a delegated manager from handing out more than they hold. Without it
  * {@code user:write} is equivalent to ADMIN — create an admin with a chosen password, or reset
  * an existing admin's password — and {@code role:write} can add a permission to a role the
- * caller already holds.
+ * caller already holds. It also stops a role manager from editing a role that carries more
+ * permissions than the manager holds, which would let it disable the role or strip the codes
+ * it cannot submit.
  * <p>
  * Decisions only; the caller supplies its own effective permissions and the target state.
  */
@@ -30,9 +32,12 @@ final class PrivilegeGuards {
         }
     }
 
-    /** Only a real admin may update, disable, reset or delete an active admin. */
-    static void checkCanModifyAdmin(boolean callerIsAdmin, boolean targetIsActiveAdmin) {
-        if (!callerIsAdmin && targetIsActiveAdmin) {
+    /**
+     * Only a real admin may update, disable, reset or delete an account that holds the ADMIN
+     * role. A disabled account still holds it and can be enabled later, so it counts too.
+     */
+    static void checkCanModifyAdmin(boolean callerIsAdmin, boolean targetHasAdminRole) {
+        if (!callerIsAdmin && targetHasAdminRole) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "Only an administrator can modify an administrator");
         }
@@ -61,6 +66,23 @@ final class PrivilegeGuards {
         if (!denied.isEmpty()) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "Cannot modify a user with permissions you do not have: " + denied);
+        }
+    }
+
+    /**
+     * A delegated role manager may not edit a role that carries permissions it does not hold.
+     * Without this, it can disable the role, or open {@code assignPermissions} and submit only
+     * the codes it owns, which silently strips the rest.
+     */
+    static void checkCanModifyRole(boolean callerIsAdmin, Collection<String> callerPermissions,
+                                   Collection<String> rolePermissions) {
+        if (callerIsAdmin || rolePermissions == null || rolePermissions.isEmpty()) {
+            return;
+        }
+        String denied = missing(callerPermissions, rolePermissions);
+        if (!denied.isEmpty()) {
+            throw new BizException(HttpStatus.FORBIDDEN,
+                    "Cannot modify a role that grants permissions you do not have: " + denied);
         }
     }
 

@@ -84,7 +84,7 @@ public class RoleController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "更新成功，返回最新角色"),
             @ApiResponse(responseCode = "400", description = "角色名称为空"),
-            @ApiResponse(responseCode = "403", description = "试图禁用内置角色"),
+            @ApiResponse(responseCode = "403", description = "试图禁用内置角色，或角色当前权限高于自己"),
             @ApiResponse(responseCode = "404", description = "角色不存在")
     })
     @SaCheckPermission(PermissionCodes.ROLE_WRITE)
@@ -98,7 +98,7 @@ public class RoleController {
     @Operation(summary = "删除角色", description = "逻辑删除；内置角色和仍有用户使用的角色不能删除。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "删除成功"),
-            @ApiResponse(responseCode = "403", description = "内置角色不能删除"),
+            @ApiResponse(responseCode = "403", description = "内置角色不能删除，或角色当前权限高于自己"),
             @ApiResponse(responseCode = "409", description = "角色仍有用户使用"),
             @ApiResponse(responseCode = "404", description = "角色不存在")
     })
@@ -111,11 +111,11 @@ public class RoleController {
     }
 
     @Operation(summary = "设置角色权限",
-            description = "提交的权限编码列表会整体替换角色原有权限；空数组表示撤销全部权限。ADMIN 恒有全部权限，不能设置。")
+            description = "提交的权限编码列表会整体替换角色原有权限；空数组表示撤销全部权限。内置角色（ADMIN/USER）的权限不可修改。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "设置成功，返回最新角色详情"),
             @ApiResponse(responseCode = "400", description = "权限编码不在权限目录中"),
-            @ApiResponse(responseCode = "403", description = "ADMIN 角色的权限不能修改"),
+            @ApiResponse(responseCode = "403", description = "内置角色的权限不能修改，角色当前权限高于自己，或提交了自己未拥有的权限"),
             @ApiResponse(responseCode = "404", description = "角色不存在")
     })
     @SaCheckPermission(PermissionCodes.ROLE_WRITE)

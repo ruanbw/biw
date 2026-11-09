@@ -72,6 +72,7 @@ public class UserController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "创建成功，返回新用户"),
             @ApiResponse(responseCode = "400", description = "角色编码不存在"),
+            @ApiResponse(responseCode = "403", description = "非管理员授予 ADMIN 角色，或分配了自己未拥有的权限"),
             @ApiResponse(responseCode = "409", description = "用户名已存在")
     })
     @SaCheckPermission(PermissionCodes.USER_WRITE)
@@ -85,7 +86,7 @@ public class UserController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "更新成功，返回最新用户"),
             @ApiResponse(responseCode = "400", description = "角色编码不存在"),
-            @ApiResponse(responseCode = "403", description = "操作会移除最后一个启用的管理员，或试图禁用/修改自己的角色"),
+            @ApiResponse(responseCode = "403", description = "操作会移除最后一个启用的管理员、修改自己的角色、禁用自己，或目标是管理员/权限高于自己的用户"),
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @SaCheckPermission(PermissionCodes.USER_WRITE)
@@ -99,7 +100,7 @@ public class UserController {
     @Operation(summary = "删除用户", description = "逻辑删除并清理角色关联；不能删除自己。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "删除成功"),
-            @ApiResponse(responseCode = "403", description = "不能删除自己，或会移除最后一个启用的管理员")
+            @ApiResponse(responseCode = "403", description = "不能删除自己、会移除最后一个启用的管理员，或目标是管理员/权限高于自己的用户")
     })
     @SaCheckPermission(PermissionCodes.USER_WRITE)
     @DeleteMapping("/{id}")
@@ -112,7 +113,7 @@ public class UserController {
     @Operation(summary = "批量删除用户", description = "一次最多 100 个；角色关联一并清理，被删除的用户会立即下线。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "删除成功"),
-            @ApiResponse(responseCode = "403", description = "包含自己，或会移除最后一个启用的管理员")
+            @ApiResponse(responseCode = "403", description = "包含自己、会移除最后一个启用的管理员，或包含管理员/权限高于自己的用户")
     })
     @SaCheckPermission(PermissionCodes.USER_WRITE)
     @PostMapping("/batch-delete")
@@ -124,6 +125,7 @@ public class UserController {
     @Operation(summary = "重置密码", description = "设置新密码并让该用户的所有会话立即失效。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "重置成功"),
+            @ApiResponse(responseCode = "403", description = "目标是管理员，或权限高于自己"),
             @ApiResponse(responseCode = "404", description = "用户不存在")
     })
     @SaCheckPermission(PermissionCodes.USER_WRITE)

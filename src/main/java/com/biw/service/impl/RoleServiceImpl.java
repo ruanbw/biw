@@ -53,7 +53,10 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     @Override
     public PageResult<SysRole> listPage(long page, long size, String keyword) {
         Page<SysRole> result = page(
-                new Page<>(Math.max(page, 1), Math.min(Math.max(size, 1), 100)),
+                // The upper bound matters: a huge page overflows the offset, and a very large
+                // one still asks PostgreSQL to walk that many rows before returning nothing.
+                new Page<>(Math.min(Math.max(page, 1), 100_000),
+                        Math.min(Math.max(size, 1), 100)),
                 Wrappers.<SysRole>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
                                 .like(SysRole::getCode, keyword)
@@ -77,7 +80,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         List<String> permissionCodes = RoleCodes.ADMIN.equals(role.getCode())
                 ? List.of(PermissionCodes.ALL_WILDCARD)
                 : rolePermissionMapper.selectPermissionCodes(id);
-        return new RoleDetailVO(role, permissionCodes, userRoleMapper.countActiveUsersByRoleId(id));
+        return new RoleDetailVO(role, permissionCodes, userRoleMapper.countUsersByRoleId(id));
     }
 
     @Override
@@ -115,6 +118,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     public SysRole update(Long id, UpdateRoleRequest request) {
         SysRole role = require(id);
         RoleGuards.checkUpdate(role, request.status());
+        checkCanModifyRole(role);
 
         String name = null;
         if (request.name() != null) {
@@ -146,7 +150,8 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         // Serialize against assignPermissions and against a user update that is resolving this
         // role, so the count cannot be invalidated between the check and the logic delete.
         SysRole role = requireForUpdate(id);
-        RoleGuards.checkDelete(role, userRoleMapper.countActiveUsersByRoleId(id));
+        RoleGuards.checkDelete(role, userRoleMapper.countUsersByRoleId(id));
+        checkCanModifyRole(role);
 
         removeById(id);
         // A logic delete keeps the row, so the FK cascade never fires and the links need removing.
@@ -163,6 +168,11 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         SysRole role = requireForUpdate(id);
         RoleGuards.checkPermissionsEditable(role);
 
+        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        PrivilegeGuards.checkCanModifyRole(
+                callerPermissions.contains(PermissionCodes.ALL_WILDCARD), callerPermissions,
+                rolePermissionMapper.selectPermissionCodes(id));
+
         List<String> codes = request.permissionCodes().stream().distinct().toList();
         List<SysPermission> permissions = codes.isEmpty()
                 ? List.of()
@@ -178,7 +188,6 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
             throw new BizException(HttpStatus.BAD_REQUEST, "Unknown permission: " + missing);
         }
 
-        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
         PrivilegeGuards.checkCanGrantPermissions(
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD), callerPermissions, codes);
 
@@ -190,6 +199,19 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                 .set(SysRole::getUpdatedAt, OffsetDateTime.now())
                 .update();
         return get(id);
+    }
+
+    /**
+     * A delegated role manager may only edit a role whose current permissions it already holds.
+     * The current set is checked, not the request: otherwise it could disable a stronger role,
+     * or replace its permissions with the subset it owns and silently strip the rest.
+     */
+    private void checkCanModifyRole(SysRole role) {
+        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        PrivilegeGuards.checkCanModifyRole(
+                callerPermissions.contains(PermissionCodes.ALL_WILDCARD),
+                callerPermissions,
+                rolePermissionMapper.selectPermissionCodes(role.getId()));
     }
 
     /**
