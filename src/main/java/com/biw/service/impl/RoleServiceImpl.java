@@ -4,9 +4,9 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
-import com.biw.common.api.PageBounds;
 import com.biw.common.api.OptionQuery;
 import com.biw.common.api.OptionVO;
+import com.biw.common.api.PageBounds;
 import com.biw.common.api.PageResult;
 import com.biw.common.exception.BizException;
 import com.biw.entity.rbac.PermissionCodes;
@@ -233,6 +233,12 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD),
                 callerPermissions,
                 rolePermissionMapper.selectPermissionCodes(role.getId()));
+    }
+
+    /** The role name is the label; the code disambiguates roles with similar names. */
+    private static OptionVO toOption(SysRole role) {
+        return new OptionVO(role.getId(), role.getName(), role.getCode(),
+                role.getStatus() == RoleStatus.DISABLED);
     }
 
     /**

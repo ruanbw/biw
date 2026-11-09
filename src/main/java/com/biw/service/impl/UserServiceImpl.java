@@ -4,6 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.biw.common.api.OptionQuery;
+import com.biw.common.api.OptionVO;
 import com.biw.common.api.PageBounds;
 import com.biw.common.api.PageResult;
 import com.biw.common.audit.SecurityAudit;
@@ -162,6 +164,22 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     }
 
     @Override
+    public List<OptionVO> listOptions(String keyword, int limit, List<Long> ids) {
+        if (ids != null) {
+            List<Long> distinct = OptionQuery.distinctIds(ids);
+            if (distinct.isEmpty()) {
+                return List.of();
+            }
+            return baseMapper.selectOptionsByIds(distinct).stream()
+                    .map(UserServiceImpl::toOption)
+                    .toList();
+        }
+        return baseMapper.selectOptions(OptionQuery.pattern(keyword), OptionQuery.limit(limit)).stream()
+                .map(UserServiceImpl::toOption)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public SysUser create(CreateUserRequest request) {
         String username = normalize(request.username());
@@ -306,6 +324,16 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private SysUser withRoleCodes(SysUser user) {
         user.setRoleCodes(userRoleMapper.selectRoleCodes(user.getId()));
         return user;
+    }
+
+    /** A nickname is optional; when it is blank the username is the only usable label. */
+    private static OptionVO toOption(SysUser user) {
+        String nickname = user.getNickname() == null ? "" : user.getNickname().trim();
+        return new OptionVO(
+                user.getId(),
+                nickname.isEmpty() ? user.getUsername() : nickname,
+                nickname.isEmpty() ? null : user.getUsername(),
+                user.getStatus() == UserStatus.DISABLED);
     }
 
     /**

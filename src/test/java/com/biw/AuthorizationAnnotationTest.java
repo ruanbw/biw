@@ -29,6 +29,7 @@ class AuthorizationAnnotationTest {
 
     private static final Map<String, String> EXPECTED = Map.ofEntries(
             entry("GET /api/users", PermissionCodes.USER_READ),
+            entry("GET /api/users/options", PermissionCodes.USER_READ),
             entry("POST /api/users", PermissionCodes.USER_WRITE),
             entry("GET /api/users/{id}", PermissionCodes.USER_READ),
             entry("PUT /api/users/{id}", PermissionCodes.USER_WRITE),
@@ -36,6 +37,7 @@ class AuthorizationAnnotationTest {
             entry("POST /api/users/batch-delete", PermissionCodes.USER_WRITE),
             entry("POST /api/users/{id}/reset-password", PermissionCodes.USER_WRITE),
             entry("GET /api/roles", PermissionCodes.ROLE_READ),
+            entry("GET /api/roles/options", PermissionCodes.ROLE_READ),
             entry("POST /api/roles", PermissionCodes.ROLE_WRITE),
             entry("GET /api/roles/{id}", PermissionCodes.ROLE_READ),
             entry("PUT /api/roles/{id}", PermissionCodes.ROLE_WRITE),

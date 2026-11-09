@@ -1,6 +1,8 @@
 package com.biw.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import cn.dev33.satoken.annotation.SaMode;
+import com.biw.common.api.OptionVO;
 import com.biw.common.api.PageResult;
 import com.biw.common.api.Result;
 import com.biw.config.OpenApiConfig;
@@ -28,6 +30,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "用户管理", description = "查询接口需要 user:read，写接口需要 user:write")
 @SecurityRequirement(name = OpenApiConfig.TOKEN_SCHEME)
 @RestController
@@ -53,6 +57,26 @@ public class UserController {
             @Parameter(description = "关键字，模糊匹配用户名或昵称", example = "ali")
             @RequestParam(required = false) String keyword) {
         return Result.ok(userService.listPage(page, size, keyword));
+    }
+
+    @Operation(summary = "用户下拉选项",
+            description = "按用户名或昵称搜索，只返回启用用户。传 ids 时按 ID 回显已选项（含禁用），"
+                    + "此时忽略 keyword 和 limit。")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "选项列表"),
+            @ApiResponse(responseCode = "400", description = "ids 超过 100 个"),
+            @ApiResponse(responseCode = "403", description = "缺少 user:read 或 user:write 权限")
+    })
+    @SaCheckPermission(value = {PermissionCodes.USER_READ, PermissionCodes.USER_WRITE}, mode = SaMode.OR)
+    @GetMapping("/options")
+    public Result<List<OptionVO>> options(
+            @Parameter(description = "关键字，匹配用户名或昵称", example = "ali")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "返回条数，1-50", example = "20")
+            @RequestParam(defaultValue = "20") int limit,
+            @Parameter(description = "按 ID 回显已选项，逗号分隔，最多 100 个", example = "1,2,3")
+            @RequestParam(required = false) List<Long> ids) {
+        return Result.ok(userService.listOptions(keyword, limit, ids));
     }
 
     @Operation(summary = "按 ID 查询用户", description = "返回用户及其 roleCodes。")
