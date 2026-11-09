@@ -26,7 +26,7 @@ server:
 # ---------------------------------------------------------------
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
-  type-aliases-package: com.biw.**.entity
+  type-aliases-package: com.biw.entity.**
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
@@ -43,16 +43,6 @@ mybatis-plus:
 # Sa-Token
 # Sessions are persisted in Redis (see sa-token-redis-template).
 # ---------------------------------------------------------------
-# ---------------------------------------------------------------
-# Application specific
-# ---------------------------------------------------------------
-biw:
-  auth:
-    # Demo account used by /api/auth/login until a real user table exists.
-    # Override the password in application-local.yml or via env var.
-    demo-username: admin
-    demo-password: CHANGE_ME
-
 sa-token:
   token-name: satoken
   # 30 days
