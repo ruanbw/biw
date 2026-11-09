@@ -13,6 +13,8 @@ import com.biw.entity.user.dto.ResetPasswordRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
 import com.biw.entity.user.vo.LoginVO;
 import com.biw.entity.user.SysUser;
+import com.biw.entity.user.UserRole;
+import com.biw.entity.user.UserStatus;
 import com.biw.mapper.SysUserMapper;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
@@ -59,7 +61,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         assertNotLocked(username);
 
         SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
-        boolean enabled = user != null && Integer.valueOf(1).equals(user.getStatus());
+        boolean enabled = user != null && user.getStatus() == UserStatus.ENABLED;
         // Always run one BCrypt comparison, even for an unknown or disabled account: returning
         // earlier would answer in ~1ms instead of the ~200ms a real check costs, which tells an
         // attacker whether the username exists.
@@ -133,17 +135,17 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
 
         Long me = StpUtil.getLoginIdAsLong();
-        boolean roleChanged = request.role() != null && !request.role().equals(user.getRole());
-        boolean statusChanged = request.status() != null && !request.status().equals(user.getStatus());
-        boolean disabling = statusChanged && request.status() == 0;
+        boolean roleChanged = request.role() != null && request.role() != user.getRole();
+        boolean statusChanged = request.status() != null && request.status() != user.getStatus();
+        boolean disabling = statusChanged && request.status() == UserStatus.DISABLED;
 
         if (id.equals(me) && (roleChanged || disabling)) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "You cannot change your own role or disable yourself");
         }
         if ((roleChanged || disabling)
-                && "ADMIN".equals(user.getRole())
-                && Integer.valueOf(1).equals(user.getStatus())
+                && user.getRole() == UserRole.ADMIN
+                && user.getStatus() == UserStatus.ENABLED
                 && countActiveAdminsForUpdate() <= 1) {
             throw new BizException(HttpStatus.FORBIDDEN,
                     "At least one active administrator must remain");
@@ -190,7 +192,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
 
         long deletingAdmins = users.stream()
-                .filter(u -> "ADMIN".equals(u.getRole()) && Integer.valueOf(1).equals(u.getStatus()))
+                .filter(u -> u.getRole() == UserRole.ADMIN && u.getStatus() == UserStatus.ENABLED)
                 .count();
         if (deletingAdmins > 0 && countActiveAdminsForUpdate() - deletingAdmins < 1) {
             throw new BizException(HttpStatus.FORBIDDEN,
@@ -225,8 +227,8 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private long countActiveAdminsForUpdate() {
         return list(Wrappers.<SysUser>lambdaQuery()
                 .select(SysUser::getId)
-                .eq(SysUser::getRole, "ADMIN")
-                .eq(SysUser::getStatus, 1)
+                .eq(SysUser::getRole, UserRole.ADMIN)
+                .eq(SysUser::getStatus, UserStatus.ENABLED)
                 .orderByAsc(SysUser::getId)
                 .last("FOR UPDATE"))
                 .size();

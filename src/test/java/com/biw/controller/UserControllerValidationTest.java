@@ -43,7 +43,19 @@ class UserControllerValidationTest {
                         .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"role\":\"ROOT\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message", containsString("role")));
+                .andExpect(jsonPath("$.message", containsString("role")))
+                .andExpect(jsonPath("$.message", containsString("ADMIN")));
+    }
+
+    @Test
+    void rejectsUnknownStatus() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"status\":\"MAYBE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message", containsString("status")))
+                .andExpect(jsonPath("$.message", containsString("ENABLED")));
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.biw.convert;
 
 import com.biw.entity.user.SysUser;
+import com.biw.entity.user.UserRole;
+import com.biw.entity.user.UserStatus;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
 import org.junit.jupiter.api.Test;
@@ -20,8 +22,8 @@ class UserConverterTest {
         assertThat(user.getUsername()).isEqualTo("bob");
         assertThat(user.getPasswordHash()).isEqualTo("hash");
         assertThat(user.getNickname()).isEmpty();
-        assertThat(user.getRole()).isEqualTo("USER");
-        assertThat(user.getStatus()).isEqualTo(1);
+        assertThat(user.getRole()).isEqualTo(UserRole.USER);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ENABLED);
         assertThat(user.getDeleted()).isZero();
         assertThat(user.getCreatedAt()).isNotNull();
         assertThat(user.getUpdatedAt()).isNotNull();
@@ -31,27 +33,29 @@ class UserConverterTest {
     @Test
     void keepsExplicitFieldsAndTrimsNickname() {
         SysUser user = converter.toEntity(
-                new CreateUserRequest("bob", "raw-password", "  Bob  ", "ADMIN", 0), "bob", "hash");
+                new CreateUserRequest("bob", "raw-password", "  Bob  ", UserRole.ADMIN, UserStatus.DISABLED),
+                "bob", "hash");
 
         assertThat(user.getNickname()).isEqualTo("Bob");
-        assertThat(user.getRole()).isEqualTo("ADMIN");
-        assertThat(user.getStatus()).isZero();
+        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.DISABLED);
     }
 
     @Test
     void appliesOnlyPresentUpdateFields() {
         SysUser user = converter.toEntity(
-                new CreateUserRequest("bob", "raw-password", "Bob", "USER", 1), "bob", "hash");
+                new CreateUserRequest("bob", "raw-password", "Bob", UserRole.USER, UserStatus.ENABLED),
+                "bob", "hash");
         user.setId(7L);
 
-        converter.applyUpdate(new UpdateUserRequest("  Bobby  ", null, 0), user);
+        converter.applyUpdate(new UpdateUserRequest("  Bobby  ", null, UserStatus.DISABLED), user);
 
         assertThat(user.getId()).isEqualTo(7L);
         assertThat(user.getUsername()).isEqualTo("bob");
         assertThat(user.getPasswordHash()).isEqualTo("hash");
         assertThat(user.getNickname()).isEqualTo("Bobby");
-        assertThat(user.getRole()).isEqualTo("USER");
-        assertThat(user.getStatus()).isZero();
+        assertThat(user.getRole()).isEqualTo(UserRole.USER);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.DISABLED);
         assertThat(user.getUpdatedAt()).isAfterOrEqualTo(user.getCreatedAt());
     }
 }

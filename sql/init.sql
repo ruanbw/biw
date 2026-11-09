@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     password_hash VARCHAR(100) NOT NULL,
     nickname      VARCHAR(64)  NOT NULL DEFAULT '',
     role          VARCHAR(16)  NOT NULL DEFAULT 'USER',
-    status        SMALLINT     NOT NULL DEFAULT 1,
+    status        VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
     deleted       SMALLINT     NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     CONSTRAINT pk_sys_user PRIMARY KEY (id),
     CONSTRAINT ck_sys_user_username CHECK (username = lower(username)),
     CONSTRAINT ck_sys_user_role CHECK (role IN ('ADMIN', 'USER')),
-    CONSTRAINT ck_sys_user_status CHECK (status IN (0, 1)),
+    CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
     CONSTRAINT ck_sys_user_deleted CHECK (deleted IN (0, 1))
 );
 

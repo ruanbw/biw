@@ -26,12 +26,11 @@ public class SysUser {
     @Schema(description = "昵称", example = "爱丽丝")
     private String nickname;
 
-    @Schema(description = "角色：ADMIN 管理员，USER 普通用户", example = "USER",
-            allowableValues = {"ADMIN", "USER"})
-    private String role;
+    @Schema(description = "角色", example = "USER")
+    private UserRole role;
 
-    @Schema(description = "状态：1 启用，0 禁用", example = "1")
-    private Integer status;
+    @Schema(description = "状态", example = "ENABLED")
+    private UserStatus status;
 
     @JsonIgnore
     @TableLogic
@@ -75,19 +74,19 @@ public class SysUser {
         this.nickname = nickname;
     }
 
-    public String getRole() {
+    public UserRole getRole() {
         return role;
     }
 
-    public void setRole(String role) {
+    public void setRole(UserRole role) {
         this.role = role;
     }
 
-    public Integer getStatus() {
+    public UserStatus getStatus() {
         return status;
     }
 
-    public void setStatus(Integer status) {
+    public void setStatus(UserStatus status) {
         this.status = status;
     }
 

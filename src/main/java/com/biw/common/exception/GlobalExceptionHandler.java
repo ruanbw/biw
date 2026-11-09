@@ -4,6 +4,8 @@ import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.exception.NotRoleException;
 import com.biw.common.api.Result;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -86,7 +90,28 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         log.debug("unreadable request body: {}", ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body");
+        return build(HttpStatus.BAD_REQUEST, unreadableBodyMessage(ex));
+    }
+
+    /**
+     * Names the field when Jackson rejected a value, typically an unknown enum constant such as
+     * {@code "status": "MAYBE"}. Without this the client only learns that the body was unreadable.
+     */
+    private static String unreadableBodyMessage(HttpMessageNotReadableException ex) {
+        if (!(ex.getCause() instanceof InvalidFormatException invalid) || !invalid.getTargetType().isEnum()) {
+            return "Malformed or unreadable request body";
+        }
+        String field = invalid.getPath().stream()
+                .map(JacksonException.Reference::getPropertyName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining("."));
+        if (field.isBlank()) {
+            return "Malformed or unreadable request body";
+        }
+        String allowed = Arrays.stream(invalid.getTargetType().getEnumConstants())
+                .map(String::valueOf)
+                .collect(Collectors.joining(", "));
+        return field + ": must be one of " + allowed;
     }
 
     /** Body sent with a {@code Content-Type} no converter can read, e.g. {@code text/plain} on a JSON endpoint. */

@@ -1,8 +1,8 @@
 package com.biw.entity.user.dto;
 
+import com.biw.entity.user.UserRole;
+import com.biw.entity.user.UserStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -26,14 +26,10 @@ public record CreateUserRequest(
         @Size(max = 64, message = "Nickname must not exceed 64 characters")
         String nickname,
 
-        @Schema(description = "角色：ADMIN 管理员，USER 普通用户；默认 USER", example = "USER",
-                allowableValues = {"ADMIN", "USER"})
-        @Pattern(regexp = "ADMIN|USER", message = "Role must be ADMIN or USER")
-        String role,
+        @Schema(description = "角色，默认 USER", example = "USER")
+        UserRole role,
 
-        @Schema(description = "状态：1 启用，0 禁用；默认 1", example = "1")
-        @Min(value = 0, message = "Status must be 0 or 1")
-        @Max(value = 1, message = "Status must be 0 or 1")
-        Integer status
+        @Schema(description = "状态，默认 ENABLED", example = "ENABLED")
+        UserStatus status
 ) {
 }
