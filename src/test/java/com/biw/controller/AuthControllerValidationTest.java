@@ -4,6 +4,7 @@ import com.biw.common.exception.BizException;
 import com.biw.common.exception.GlobalExceptionHandler;
 import com.biw.entity.user.SysUser;
 import com.biw.entity.user.dto.LoginRequest;
+import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,12 +29,13 @@ class AuthControllerValidationTest {
     @BeforeEach
     void setUp() {
         UserService userService = mock(UserService.class);
+        RbacAuthorities rbacAuthorities = mock(RbacAuthorities.class);
         when(userService.login(any(LoginRequest.class)))
                 .thenThrow(new BizException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
         when(userService.me()).thenReturn(new SysUser());
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuthController(userService))
+                .standaloneSetup(new AuthController(userService, rbacAuthorities))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

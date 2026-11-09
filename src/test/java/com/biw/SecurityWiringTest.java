@@ -41,7 +41,11 @@ class SecurityWiringTest {
     @Test
     void apiEndpointsRejectAnonymousRequests() throws Exception {
         assertThat(status("GET", "/api/auth/me", null)).isEqualTo(401);
+        assertThat(status("GET", "/api/auth/permissions", null)).isEqualTo(401);
         assertThat(status("GET", "/api/users", null)).isEqualTo(401);
+        assertThat(status("GET", "/api/roles", null)).isEqualTo(401);
+        assertThat(status("PUT", "/api/roles/1/permissions", "{\"permissionCodes\":[]}")).isEqualTo(401);
+        assertThat(status("GET", "/api/permissions", null)).isEqualTo(401);
         assertThat(status("POST", "/api/users/batch-delete", "{\"ids\":[1]}")).isEqualTo(401);
     }
 

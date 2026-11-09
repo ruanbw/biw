@@ -6,6 +6,7 @@ import com.biw.config.OpenApiConfig;
 import com.biw.entity.user.dto.LoginRequest;
 import com.biw.entity.user.vo.LoginVO;
 import com.biw.entity.user.SysUser;
+import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -19,15 +20,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "认证", description = "登录、登出与当前登录用户")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final UserService userService;
+    private final RbacAuthorities rbacAuthorities;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, RbacAuthorities rbacAuthorities) {
         this.userService = userService;
+        this.rbacAuthorities = rbacAuthorities;
     }
 
     @Operation(summary = "登录",
@@ -60,5 +65,13 @@ public class AuthController {
     @GetMapping("/me")
     public Result<SysUser> me() {
         return Result.ok(userService.me());
+    }
+
+    @Operation(summary = "当前用户权限",
+            description = "返回当前登录用户的有效权限码；内置 ADMIN 返回 [\"*\"] 表示全部权限。")
+    @SecurityRequirement(name = OpenApiConfig.TOKEN_SCHEME)
+    @GetMapping("/permissions")
+    public Result<List<String>> permissions() {
+        return Result.ok(rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong()));
     }
 }
