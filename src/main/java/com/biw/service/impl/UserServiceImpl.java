@@ -16,6 +16,7 @@ import com.biw.entity.user.SysUser;
 import com.biw.mapper.SysUserMapper;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,32 +24,53 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
+    /** Failed logins allowed per account before it is locked for {@link #LOGIN_LOCK}. */
+    private static final int MAX_LOGIN_FAILURES = 10;
+    private static final Duration LOGIN_LOCK = Duration.ofMinutes(5);
+    private static final String LOGIN_FAIL_KEY_PREFIX = "biw:login:fail:";
+
     private final PasswordEncoder passwordEncoder;
     private final UserConverter userConverter;
+    private final StringRedisTemplate redis;
+    /** Compared against when the account is unknown or disabled, so both cases cost one BCrypt call. */
+    private final String dummyPasswordHash;
 
-    public UserServiceImpl(PasswordEncoder passwordEncoder, UserConverter userConverter) {
+    public UserServiceImpl(PasswordEncoder passwordEncoder, UserConverter userConverter,
+                           StringRedisTemplate redis) {
         this.passwordEncoder = passwordEncoder;
         this.userConverter = userConverter;
+        this.redis = redis;
+        this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
     @Override
     public LoginVO login(LoginRequest request) {
-        SysUser user = lambdaQuery()
-                .eq(SysUser::getUsername, normalize(request.username()))
-                .one();
-        if (user == null
-                || !Integer.valueOf(1).equals(user.getStatus())
-                || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        String username = normalize(request.username());
+        assertNotLocked(username);
+
+        SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
+        boolean enabled = user != null && Integer.valueOf(1).equals(user.getStatus());
+        // Always run one BCrypt comparison, even for an unknown or disabled account: returning
+        // earlier would answer in ~1ms instead of the ~200ms a real check costs, which tells an
+        // attacker whether the username exists.
+        boolean passwordMatches = passwordEncoder.matches(request.password(),
+                enabled ? user.getPasswordHash() : dummyPasswordHash);
+        if (!enabled || !passwordMatches) {
+            recordFailure(username, user != null);
             throw new BizException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
+
+        redis.delete(LOGIN_FAIL_KEY_PREFIX + username);
         StpUtil.login(user.getId());
         return new LoginVO(StpUtil.getTokenName(), StpUtil.getTokenValue(),
                 StpUtil.getTokenTimeout(), user);
@@ -218,5 +240,27 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (password != null && password.getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new BizException(HttpStatus.BAD_REQUEST, "Password must not exceed 72 bytes");
         }
+    }
+
+    private void assertNotLocked(String username) {
+        String failures = redis.opsForValue().get(LOGIN_FAIL_KEY_PREFIX + username);
+        if (failures != null && Long.parseLong(failures) >= MAX_LOGIN_FAILURES) {
+            throw new BizException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many failed login attempts, try again in " + LOGIN_LOCK.toMinutes() + " minutes");
+        }
+    }
+
+    /**
+     * Counts one failed attempt. Only known accounts get a counter, so unknown usernames cannot
+     * fill Redis with keys; every failure pushes the expiry out, so the lock ends five minutes
+     * after the last try.
+     */
+    private void recordFailure(String username, boolean knownAccount) {
+        if (!knownAccount) {
+            return;
+        }
+        String key = LOGIN_FAIL_KEY_PREFIX + username;
+        redis.opsForValue().increment(key);
+        redis.expire(key, LOGIN_LOCK);
     }
 }
