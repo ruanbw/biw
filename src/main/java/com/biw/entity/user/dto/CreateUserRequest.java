@@ -1,11 +1,12 @@
 package com.biw.entity.user.dto;
 
-import com.biw.entity.user.UserRole;
 import com.biw.entity.user.UserStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 @Schema(description = "创建用户请求")
 public record CreateUserRequest(
@@ -26,8 +27,12 @@ public record CreateUserRequest(
         @Size(max = 64, message = "Nickname must not exceed 64 characters")
         String nickname,
 
-        @Schema(description = "角色，默认 USER", example = "USER")
-        UserRole role,
+        @Schema(description = "角色编码列表，默认 [USER]；空数组表示不分配角色", example = "[\"USER\"]")
+        @Size(max = 20, message = "At most 20 roles per user")
+        List<@NotBlank(message = "Role code must not be blank")
+             @Pattern(regexp = "^[A-Z][A-Z0-9_]{0,31}$",
+                message = "Role code must start with an uppercase letter and contain only A-Z, 0-9 and '_'")
+        String> roleCodes,
 
         @Schema(description = "状态，默认 ENABLED", example = "ENABLED")
         UserStatus status

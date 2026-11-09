@@ -8,6 +8,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,14 +40,38 @@ class UserControllerValidationTest {
     }
 
     @Test
-    void rejectsUnknownRole() throws Exception {
+    void rejectsLowercaseRoleCodes() throws Exception {
         mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"role\":\"ROOT\"}"))
+                        .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"roleCodes\":[\"admin\"]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message", containsString("role")))
-                .andExpect(jsonPath("$.message", containsString("ADMIN")));
+                .andExpect(jsonPath("$.message", containsString("Role code")));
+    }
+
+    @Test
+    void rejectsNullRoleCode() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"roleCodes\":[null]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message", containsString("Role code")));
+    }
+
+    @Test
+    void rejectsMoreThanTwentyRoleCodes() throws Exception {
+        String roleCodes = IntStream.rangeClosed(1, 21)
+                .mapToObj(i -> "\"ROLE" + i + "\"")
+                .collect(Collectors.joining(","));
+
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"roleCodes\":["
+                                + roleCodes + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message", containsString("20")));
     }
 
     @Test

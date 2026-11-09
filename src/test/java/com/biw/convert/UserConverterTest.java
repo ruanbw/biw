@@ -1,12 +1,13 @@
 package com.biw.convert;
 
 import com.biw.entity.user.SysUser;
-import com.biw.entity.user.UserRole;
 import com.biw.entity.user.UserStatus;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,7 +23,7 @@ class UserConverterTest {
         assertThat(user.getUsername()).isEqualTo("bob");
         assertThat(user.getPasswordHash()).isEqualTo("hash");
         assertThat(user.getNickname()).isEmpty();
-        assertThat(user.getRole()).isEqualTo(UserRole.USER);
+        assertThat(user.getRoleCodes()).isNull();
         assertThat(user.getStatus()).isEqualTo(UserStatus.ENABLED);
         assertThat(user.getDeleted()).isZero();
         assertThat(user.getCreatedAt()).isNotNull();
@@ -42,28 +43,32 @@ class UserConverterTest {
     @Test
     void keepsExplicitFieldsAndTrimsNickname() {
         SysUser user = converter.toEntity(
-                new CreateUserRequest("bob", "raw-password", "  Bob  ", UserRole.ADMIN, UserStatus.DISABLED),
+                new CreateUserRequest("bob", "raw-password", "  Bob  ", List.of("ADMIN"),
+                        UserStatus.DISABLED),
                 "bob", "hash");
 
         assertThat(user.getNickname()).isEqualTo("Bob");
-        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
+        // Role links are written by the service; the transient request list must not leak in.
+        assertThat(user.getRoleCodes()).isNull();
         assertThat(user.getStatus()).isEqualTo(UserStatus.DISABLED);
     }
 
     @Test
     void appliesOnlyPresentUpdateFields() {
         SysUser user = converter.toEntity(
-                new CreateUserRequest("bob", "raw-password", "Bob", UserRole.USER, UserStatus.ENABLED),
+                new CreateUserRequest("bob", "raw-password", "Bob", List.of("USER"),
+                        UserStatus.ENABLED),
                 "bob", "hash");
         user.setId(7L);
 
-        converter.applyUpdate(new UpdateUserRequest("  Bobby  ", null, UserStatus.DISABLED), user);
+        converter.applyUpdate(new UpdateUserRequest("  Bobby  ", List.of("ADMIN"),
+                UserStatus.DISABLED), user);
 
         assertThat(user.getId()).isEqualTo(7L);
         assertThat(user.getUsername()).isEqualTo("bob");
         assertThat(user.getPasswordHash()).isEqualTo("hash");
         assertThat(user.getNickname()).isEqualTo("Bobby");
-        assertThat(user.getRole()).isEqualTo(UserRole.USER);
+        assertThat(user.getRoleCodes()).isNull();
         assertThat(user.getStatus()).isEqualTo(UserStatus.DISABLED);
         assertThat(user.getUpdatedAt()).isAfterOrEqualTo(user.getCreatedAt());
     }

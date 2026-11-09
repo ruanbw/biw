@@ -7,15 +7,22 @@ import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.biw.common.api.PageResult;
 import com.biw.common.exception.BizException;
 import com.biw.convert.UserConverter;
+import com.biw.entity.rbac.PermissionCodes;
+import com.biw.entity.rbac.RoleCodes;
+import com.biw.entity.rbac.SysRole;
+import com.biw.entity.user.SysUser;
+import com.biw.entity.user.UserStatus;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.LoginRequest;
 import com.biw.entity.user.dto.ResetPasswordRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
 import com.biw.entity.user.vo.LoginVO;
-import com.biw.entity.user.SysUser;
-import com.biw.entity.user.UserRole;
-import com.biw.entity.user.UserStatus;
+import com.biw.mapper.SysRoleMapper;
+import com.biw.mapper.SysRolePermissionMapper;
 import com.biw.mapper.SysUserMapper;
+import com.biw.mapper.SysUserRoleMapper;
+import com.biw.mapper.projection.UserRoleCode;
+import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -28,10 +35,15 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
@@ -44,14 +56,24 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private final PasswordEncoder passwordEncoder;
     private final UserConverter userConverter;
     private final StringRedisTemplate redis;
+    private final SysRoleMapper roleMapper;
+    private final SysRolePermissionMapper rolePermissionMapper;
+    private final SysUserRoleMapper userRoleMapper;
+    private final RbacAuthorities rbacAuthorities;
     /** Compared against when the account is unknown or disabled, so both cases cost one BCrypt call. */
     private final String dummyPasswordHash;
 
     public UserServiceImpl(PasswordEncoder passwordEncoder, UserConverter userConverter,
-                           StringRedisTemplate redis) {
+                           StringRedisTemplate redis, SysRoleMapper roleMapper,
+                           SysRolePermissionMapper rolePermissionMapper,
+                           SysUserRoleMapper userRoleMapper, RbacAuthorities rbacAuthorities) {
         this.passwordEncoder = passwordEncoder;
         this.userConverter = userConverter;
         this.redis = redis;
+        this.roleMapper = roleMapper;
+        this.rolePermissionMapper = rolePermissionMapper;
+        this.userRoleMapper = userRoleMapper;
+        this.rbacAuthorities = rbacAuthorities;
         this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
@@ -78,7 +100,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         redis.delete(LOGIN_FAIL_KEY_PREFIX + username);
         StpUtil.login(user.getId());
         return new LoginVO(StpUtil.getTokenName(), StpUtil.getTokenValue(),
-                StpUtil.getTokenTimeout(), user);
+                StpUtil.getTokenTimeout(), withRoleCodes(user));
     }
 
     @Override
@@ -87,7 +109,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (user == null) {
             throw new BizException(HttpStatus.UNAUTHORIZED, "Session is no longer valid");
         }
-        return user;
+        return withRoleCodes(user);
     }
 
     @Override
@@ -96,7 +118,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (user == null) {
             throw new BizException(HttpStatus.NOT_FOUND, "User not found");
         }
-        return user;
+        return withRoleCodes(user);
     }
 
     @Override
@@ -112,8 +134,18 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                         // Tiebreaker: rows created in the same millisecond have no stable order in
                         // PostgreSQL, so LIMIT/OFFSET paging could show one twice and skip another.
                         .orderByDesc(SysUser::getId));
+        List<SysUser> records = result.getRecords();
+        if (!records.isEmpty()) {
+            Map<Long, List<String>> rolesByUser = userRoleMapper
+                    .selectRoleCodesByUserIds(records.stream().map(SysUser::getId).toList())
+                    .stream()
+                    .collect(Collectors.groupingBy(UserRoleCode::getUserId,
+                            Collectors.mapping(UserRoleCode::getCode, Collectors.toList())));
+            records.forEach(user -> user.setRoleCodes(
+                    rolesByUser.getOrDefault(user.getId(), List.of())));
+        }
         return new PageResult<>(
-                result.getRecords(),
+                records,
                 result.getTotal(),
                 result.getCurrent(),
                 result.getSize(),
@@ -132,13 +164,23 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
         checkPasswordBytes(request.password());
 
+        List<String> effectiveCodes = request.roleCodes() == null
+                ? List.of(RoleCodes.USER)
+                : request.roleCodes();
+        if (effectiveCodes.contains(RoleCodes.ADMIN)) {
+            PrivilegeGuards.checkCanGrantAdmin(callerIsAdmin(), effectiveCodes);
+        }
+        List<Long> roleIds = resolveRoleIds(effectiveCodes);
+        checkCanAssignRoles(roleIds);
+
         SysUser user = userConverter.toEntity(request, username, passwordEncoder.encode(request.password()));
         try {
             save(user);
         } catch (DuplicateKeyException e) {
             throw new BizException(HttpStatus.CONFLICT, "Username already exists");
         }
-        return getById(user.getId());
+        roleIds.forEach(roleId -> userRoleMapper.insert(user.getId(), roleId));
+        return get(user.getId());
     }
 
     @Override
@@ -146,12 +188,33 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     public SysUser update(Long id, UpdateUserRequest request) {
         SysUser user = get(id);
 
-        Long me = StpUtil.getLoginIdAsLong();
-        boolean roleChanged = request.role() != null && request.role() != user.getRole();
-        boolean statusChanged = request.status() != null && request.status() != user.getStatus();
-        boolean disabling = statusChanged && request.status() == UserStatus.DISABLED;
+        List<String> assignedRoles = user.getRoleCodes();
+        List<String> activeRoles = userRoleMapper.selectActiveRoleCodes(id);
+        List<String> newCodes = request.roleCodes() != null ? request.roleCodes() : assignedRoles;
+        boolean roleChange = request.roleCodes() != null
+                && !new HashSet<>(newCodes).equals(new HashSet<>(assignedRoles));
+        UserStatus effectiveStatus = request.status() != null ? request.status() : user.getStatus();
+        boolean wasActiveAdmin = user.getStatus() == UserStatus.ENABLED
+                && activeRoles.contains(RoleCodes.ADMIN);
+        boolean staysActiveAdmin = effectiveStatus == UserStatus.ENABLED
+                && newCodes.contains(RoleCodes.ADMIN);
+        boolean disabling = effectiveStatus == UserStatus.DISABLED
+                && user.getStatus() != UserStatus.DISABLED;
 
-        UserGuards.checkUpdate(user, me, roleChanged, disabling, this::countActiveAdminsForUpdate);
+        if (assignedRoles.contains(RoleCodes.ADMIN)
+                || (request.roleCodes() != null && request.roleCodes().contains(RoleCodes.ADMIN))) {
+            boolean callerIsAdmin = callerIsAdmin();
+            PrivilegeGuards.checkCanModifyAdmin(callerIsAdmin, assignedRoles.contains(RoleCodes.ADMIN));
+            PrivilegeGuards.checkCanGrantAdmin(callerIsAdmin, request.roleCodes());
+        }
+        checkCanModifyTargets(List.of(id));
+        // Resolve first: an unknown role code should answer 400 even when the same request
+        // would also remove the last admin, which the guard would otherwise report as 403.
+        List<Long> roleIds = request.roleCodes() == null ? null : resolveRoleIds(request.roleCodes());
+        checkCanAssignRoles(roleIds);
+
+        UserGuards.checkUpdate(user.getId(), StpUtil.getLoginIdAsLong(), wasActiveAdmin,
+                staysActiveAdmin, roleChange, disabling, this::countActiveAdminsForUpdate);
 
         userConverter.applyUpdate(request, user);
         // Write only the fields that were sent: writing the whole row back would undo a concurrent
@@ -159,18 +222,20 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean updated = lambdaUpdate()
                 .eq(SysUser::getId, id)
                 .set(request.nickname() != null, SysUser::getNickname, user.getNickname())
-                .set(request.role() != null, SysUser::getRole, user.getRole())
                 .set(request.status() != null, SysUser::getStatus, user.getStatus())
                 .set(SysUser::getUpdatedAt, user.getUpdatedAt())
                 .update();
         if (!updated) {
             throw new BizException(HttpStatus.NOT_FOUND, "User not found");
         }
+        if (roleIds != null) {
+            replaceRoles(id, roleIds);
+        }
 
         if (disabling) {
             StpUtil.logout(id);
         }
-        return user;
+        return get(id);
     }
 
     @Override
@@ -187,16 +252,36 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
             throw new BizException(HttpStatus.BAD_REQUEST, "ids must contain between 1 and 100 items");
         }
 
-        List<SysUser> users = listByIds(distinct);
-        UserGuards.checkDelete(users, StpUtil.getLoginIdAsLong(), this::countActiveAdminsForUpdate);
+        boolean deletingSelf = distinct.contains(StpUtil.getLoginIdAsLong());
+        long deletingAdmins = userRoleMapper.selectActiveAdminUserIds(distinct).size();
+        boolean deletingAnyAdmin = userRoleMapper.selectRoleCodesByUserIds(distinct).stream()
+                .anyMatch(row -> RoleCodes.ADMIN.equals(row.getCode()));
+        if (deletingAnyAdmin) {
+            // A disabled admin still has the role; deleting it is still an admin operation.
+            PrivilegeGuards.checkCanModifyAdmin(callerIsAdmin(), true);
+        }
+        checkCanModifyTargets(distinct);
+        UserGuards.checkDelete(deletingSelf, deletingAdmins, this::countActiveAdminsForUpdate);
 
         removeByIds(distinct);
-        distinct.forEach(id -> StpUtil.logout(id));
+        distinct.forEach(userRoleMapper::deleteByUserId);
+        distinct.forEach(StpUtil::logout);
     }
 
     @Override
     @Transactional
     public void resetPassword(Long id, ResetPasswordRequest request) {
+        SysUser target = getById(id);
+        if (target == null) {
+            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+        }
+        List<String> targetRoles = userRoleMapper.selectRoleCodes(id);
+        if (targetRoles.contains(RoleCodes.ADMIN)) {
+            // Even a disabled account keeps the role; enabling it later would restore admin power.
+            PrivilegeGuards.checkCanModifyAdmin(callerIsAdmin(), true);
+        }
+        checkCanModifyTargets(List.of(id));
+
         checkPasswordBytes(request.newPassword());
         boolean updated = lambdaUpdate()
                 .eq(SysUser::getId, id)
@@ -209,6 +294,47 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         StpUtil.logout(id);
     }
 
+    private SysUser withRoleCodes(SysUser user) {
+        user.setRoleCodes(userRoleMapper.selectRoleCodes(user.getId()));
+        return user;
+    }
+
+    /**
+     * Maps role codes from the request to ids of existing roles. Null means "not supplied"
+     * and stays null; an empty list means "no roles" and resolves to no ids. A disabled role
+     * is accepted: it grants nothing until enabled, and a user that still holds one can be
+     * submitted back unchanged.
+     */
+    private List<Long> resolveRoleIds(List<String> codes) {
+        if (codes == null) {
+            return null;
+        }
+        List<String> distinct = codes.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return List.of();
+        }
+        List<SysRole> roles = roleMapper.selectList(Wrappers.<SysRole>lambdaQuery()
+                .in(SysRole::getCode, distinct)
+                // Share-lock the rows until the link insert commits: a concurrent role delete
+                // waits here, then re-reads the assignment count and refuses to delete.
+                .last("FOR SHARE"));
+        if (roles.size() != distinct.size()) {
+            Set<String> found = roles.stream().map(SysRole::getCode).collect(Collectors.toSet());
+            String missing = distinct.stream()
+                    .filter(code -> !found.contains(code))
+                    .map(String::valueOf)
+                    .sorted()
+                    .collect(Collectors.joining(", "));
+            throw new BizException(HttpStatus.BAD_REQUEST, "Unknown role: " + missing);
+        }
+        return roles.stream().map(SysRole::getId).toList();
+    }
+
+    private void replaceRoles(Long userId, List<Long> roleIds) {
+        userRoleMapper.deleteByUserId(userId);
+        roleIds.forEach(roleId -> userRoleMapper.insert(userId, roleId));
+    }
+
     /**
      * Counts enabled admins and locks their rows until the transaction ends. Without the lock two
      * concurrent requests can each see two admins and then remove one, leaving no admin at all —
@@ -216,13 +342,51 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
      * for every caller, so the two cannot deadlock.
      */
     private long countActiveAdminsForUpdate() {
-        return list(Wrappers.<SysUser>lambdaQuery()
-                .select(SysUser::getId)
-                .eq(SysUser::getRole, UserRole.ADMIN)
-                .eq(SysUser::getStatus, UserStatus.ENABLED)
-                .orderByAsc(SysUser::getId)
-                .last("FOR UPDATE"))
-                .size();
+        return userRoleMapper.selectActiveAdminUserIdsForUpdate().size();
+    }
+
+    private boolean callerIsAdmin() {
+        return rbacAuthorities.isAdmin(StpUtil.getLoginIdAsLong());
+    }
+
+    /**
+     * Stops a delegated user manager from taking over (or deleting) an account that carries
+     * permissions the manager lacks. The role sets are read as assigned, not as currently
+     * granting: a disabled account or role can be enabled later, so it still counts here.
+     */
+    private void checkCanModifyTargets(Collection<Long> targetIds) {
+        Set<Long> targetRoleIds = new HashSet<>();
+        targetIds.forEach(targetId -> targetRoleIds.addAll(userRoleMapper.selectRoleIds(targetId)));
+        if (targetRoleIds.isEmpty()) {
+            return;
+        }
+        List<String> targetPermissions =
+                rolePermissionMapper.selectPermissionCodesByRoleIds(targetRoleIds);
+        if (targetPermissions.isEmpty()) {
+            return;
+        }
+        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        PrivilegeGuards.checkCanModifyTarget(
+                callerPermissions.contains(PermissionCodes.ALL_WILDCARD),
+                callerPermissions,
+                targetPermissions);
+    }
+
+    /**
+     * Prevents a delegated user manager from assigning a role that carries permission codes the
+     * manager does not hold. ADMIN is handled separately: its permissions are the wildcard and
+     * never appear in sys_role_permission, so a code subset test cannot see them.
+     */
+    private void checkCanAssignRoles(List<Long> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        if (callerPermissions.contains(PermissionCodes.ALL_WILDCARD)) {
+            return;
+        }
+        List<String> rolePermissions = rolePermissionMapper.selectPermissionCodesByRoleIds(roleIds);
+        PrivilegeGuards.checkCanGrantPermissions(false, callerPermissions, rolePermissions);
     }
 
     private static String normalize(String username) {

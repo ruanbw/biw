@@ -7,6 +7,7 @@ import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,7 +28,7 @@ class SysUserJsonTest {
         user.setId(1L);
         user.setUsername("bob");
         user.setPasswordHash("$2a$12$not-for-the-client");
-        user.setRole(UserRole.USER);
+        user.setRoleCodes(List.of("USER"));
         user.setStatus(UserStatus.ENABLED);
         user.setCreatedAt(OffsetDateTime.parse("2026-01-01T12:00:00+08:00"));
 
@@ -37,7 +38,8 @@ class SysUserJsonTest {
                 .doesNotContain("passwordHash")
                 .doesNotContain("not-for-the-client")
                 .contains("\"status\":\"ENABLED\"")
-                .contains("\"role\":\"USER\"")
+                .contains("\"roleCodes\":[\"USER\"]")
+                .doesNotContain("\"role\":")
                 .contains("\"createdAt\":\"2026-01-01T12:00:00+08:00\"");
     }
 }

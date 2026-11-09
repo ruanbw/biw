@@ -1,6 +1,10 @@
--- Runs once, on first start of an empty PostgreSQL volume.
--- The database itself (biw) and the role (biw) are created by the
--- official image through POSTGRES_DB / POSTGRES_USER.
+-- Initial schema. docker-compose mounts this file into PostgreSQL's
+-- /docker-entrypoint-initdb.d, so it runs once on the first start of an empty
+-- volume. A schema change is made in this file; existing development data is
+-- rebuilt with `docker compose down -v`, or altered by hand in a real database.
+--
+-- The database (biw) and the role (biw) are created by the official PostgreSQL
+-- image through POSTGRES_DB / POSTGRES_USER.
 
 -- ---------------------------------------------------------------------------
 -- sys_user
@@ -10,7 +14,6 @@ CREATE TABLE IF NOT EXISTS sys_user (
     username      VARCHAR(64)  NOT NULL,
     password_hash VARCHAR(100) NOT NULL,
     nickname      VARCHAR(64)  NOT NULL DEFAULT '',
-    role          VARCHAR(16)  NOT NULL DEFAULT 'USER',
     status        VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
     deleted       SMALLINT     NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -18,7 +21,6 @@ CREATE TABLE IF NOT EXISTS sys_user (
 
     CONSTRAINT pk_sys_user PRIMARY KEY (id),
     CONSTRAINT ck_sys_user_username CHECK (username = lower(username)),
-    CONSTRAINT ck_sys_user_role CHECK (role IN ('ADMIN', 'USER')),
     CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
     CONSTRAINT ck_sys_user_deleted CHECK (deleted IN (0, 1))
 );
@@ -28,6 +30,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_sys_user_username_active
     ON sys_user (username)
     WHERE deleted = 0;
 
+-- ---------------------------------------------------------------------------
 -- sys_role
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sys_role (
@@ -121,7 +124,12 @@ INSERT INTO sys_permission (code, name, description) VALUES
     ('permission:read', '查看权限', '查看权限码目录')
 ON CONFLICT DO NOTHING;
 
--- First admin: insert a row with a BCrypt hash, e.g.
+-- First admin: insert a user with a BCrypt hash, then attach the ADMIN role.
 --   htpasswd -bnBC 12 "" 'your-password' | cut -d: -f2
---   INSERT INTO sys_user (username, password_hash, nickname, role)
---   VALUES ('admin', '$2y$12$...', 'Admin', 'ADMIN');
+--   INSERT INTO sys_user (username, password_hash, nickname)
+--   VALUES ('admin', '$2y$12$...', 'Admin');
+--   INSERT INTO sys_user_role (user_id, role_id)
+--   SELECT u.id, r.id
+--   FROM sys_user u
+--   JOIN sys_role r ON r.code = 'ADMIN'
+--   WHERE u.username = 'admin';

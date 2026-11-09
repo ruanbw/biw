@@ -43,9 +43,9 @@ class OpenApiDocsTest {
                 .contains("\"description\":\"用户名，不区分大小写\"")
                 .contains("密码：8 到 64 个字符")
                 .contains("\"type\":\"apiKey\"")
-                // status and role are named, not numeric
+                // status is named, not numeric
                 .contains("\"enum\":[\"ENABLED\",\"DISABLED\"]")
-                .contains("\"enum\":[\"ADMIN\",\"USER\"]")
+                .contains("\"roleCodes\"")
                 .contains("/api/users/{id}")
                 // internal fallback endpoint and sensitive columns must stay out of the contract
                 .doesNotContain("\"/error\"")

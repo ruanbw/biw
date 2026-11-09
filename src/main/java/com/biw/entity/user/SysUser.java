@@ -1,6 +1,7 @@
 package com.biw.entity.user;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -8,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Schema(description = "用户信息")
 @TableName("sys_user")
@@ -26,8 +28,10 @@ public class SysUser {
     @Schema(description = "昵称", example = "爱丽丝")
     private String nickname;
 
-    @Schema(description = "角色", example = "USER")
-    private UserRole role;
+    @Schema(description = "角色编码列表（含已禁用角色，用于展示）；实际生效权限见 /api/auth/permissions",
+            example = "[\"USER\"]")
+    @TableField(exist = false)
+    private List<String> roleCodes;
 
     @Schema(description = "状态", example = "ENABLED")
     private UserStatus status;
@@ -74,12 +78,12 @@ public class SysUser {
         this.nickname = nickname;
     }
 
-    public UserRole getRole() {
-        return role;
+    public List<String> getRoleCodes() {
+        return roleCodes;
     }
 
-    public void setRole(UserRole role) {
-        this.role = role;
+    public void setRoleCodes(List<String> roleCodes) {
+        this.roleCodes = roleCodes;
     }
 
     public UserStatus getStatus() {

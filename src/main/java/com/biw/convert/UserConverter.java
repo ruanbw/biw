@@ -1,7 +1,6 @@
 package com.biw.convert;
 
 import com.biw.entity.user.SysUser;
-import com.biw.entity.user.UserRole;
 import com.biw.entity.user.UserStatus;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
@@ -15,7 +14,7 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
 /**
  * DTO &lt;-&gt; entity mapping for {@link SysUser}. Implemented by MapStruct at compile time.
  */
-@Mapper(componentModel = "spring", imports = {UserRole.class, UserStatus.class})
+@Mapper(componentModel = "spring", imports = {UserStatus.class})
 public interface UserConverter {
 
     /**
@@ -26,7 +25,7 @@ public interface UserConverter {
     @Mapping(target = "username", source = "username")
     @Mapping(target = "passwordHash", source = "passwordHash")
     @Mapping(target = "nickname", source = "request.nickname", qualifiedByName = "trimToEmpty")
-    @Mapping(target = "role", source = "request.role", defaultExpression = "java(UserRole.USER)")
+    @Mapping(target = "roleCodes", ignore = true)
     @Mapping(target = "status", source = "request.status", defaultExpression = "java(UserStatus.ENABLED)")
     @Mapping(target = "deleted", constant = "0")
     @Mapping(target = "createdAt", expression = "java(java.time.OffsetDateTime.now())")
@@ -44,6 +43,7 @@ public interface UserConverter {
     @Mapping(target = "deleted", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "nickname", source = "nickname", qualifiedByName = "trim")
+    @Mapping(target = "roleCodes", ignore = true)
     @Mapping(target = "updatedAt", expression = "java(java.time.OffsetDateTime.now())")
     void applyUpdate(UpdateUserRequest request, @MappingTarget SysUser user);
 

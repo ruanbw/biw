@@ -3,6 +3,10 @@ package com.biw.service.impl;
 import com.biw.common.exception.BizException;
 import com.biw.convert.UserConverter;
 import com.biw.entity.user.dto.LoginRequest;
+import com.biw.mapper.SysRoleMapper;
+import com.biw.mapper.SysRolePermissionMapper;
+import com.biw.mapper.SysUserRoleMapper;
+import com.biw.service.RbacAuthorities;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,7 +17,9 @@ import static org.mockito.Mockito.mock;
 class UserServiceImplLoginTest {
 
     private final UserServiceImpl service = new UserServiceImpl(
-            mock(PasswordEncoder.class), mock(UserConverter.class), mock(StringRedisTemplate.class));
+            mock(PasswordEncoder.class), mock(UserConverter.class), mock(StringRedisTemplate.class),
+            mock(SysRoleMapper.class), mock(SysRolePermissionMapper.class),
+            mock(SysUserRoleMapper.class), mock(RbacAuthorities.class));
 
     @Test
     void rejectsAPasswordLongerThanBcryptReads() {

@@ -1,12 +1,7 @@
 package com.biw.service.impl;
 
 import com.biw.common.exception.BizException;
-import com.biw.entity.user.SysUser;
-import com.biw.entity.user.UserRole;
-import com.biw.entity.user.UserStatus;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,89 +16,82 @@ class UserGuardsTest {
     private static final Long OTHER = 2L;
 
     @Test
+    void plainRenameNeverNeedsTheAdminCount() {
+        assertThatCode(() -> UserGuards.checkUpdate(OTHER, ME, false, false, false, false,
+                () -> {
+                    throw new AssertionError("admin count must not be read");
+                }))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void adminMayRenameThemselves() {
-        assertThatCode(() -> UserGuards.checkUpdate(
-                user(ME, UserRole.ADMIN, UserStatus.ENABLED), ME, false, false, () -> 1))
+        assertThatCode(() -> UserGuards.checkUpdate(ME, ME, true, true, false, false, () -> 1))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void adminCannotRemoveTheirOwnAdminPower() {
-        SysUser me = user(ME, UserRole.ADMIN, UserStatus.ENABLED);
-
-        assertThatThrownBy(() -> UserGuards.checkUpdate(me, ME, true, false, () -> 2))
+        assertThatThrownBy(() -> UserGuards.checkUpdate(ME, ME, true, false, true, false, () -> 2))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("cannot change your own role");
-        assertThatThrownBy(() -> UserGuards.checkUpdate(me, ME, false, true, () -> 2))
+        assertThatThrownBy(() -> UserGuards.checkUpdate(ME, ME, true, false, false, true, () -> 2))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("cannot change your own role");
     }
 
     @Test
     void lastActiveAdminCannotLoseAdminPowerButAnotherOneCan() {
-        SysUser otherAdmin = user(OTHER, UserRole.ADMIN, UserStatus.ENABLED);
-
-        assertThatThrownBy(() -> UserGuards.checkUpdate(otherAdmin, ME, true, false, () -> 1))
+        assertThatThrownBy(() -> UserGuards.checkUpdate(OTHER, ME, true, false, true, false, () -> 1))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("At least one active administrator");
-        assertThatThrownBy(() -> UserGuards.checkUpdate(otherAdmin, ME, false, true, () -> 1))
+        assertThatThrownBy(() -> UserGuards.checkUpdate(OTHER, ME, true, false, false, true, () -> 1))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("At least one active administrator");
-        assertThatCode(() -> UserGuards.checkUpdate(otherAdmin, ME, true, false, () -> 2))
+        assertThatCode(() -> UserGuards.checkUpdate(OTHER, ME, true, false, true, false, () -> 2))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void nonAdminTargetsAreNotLimitedByTheAdminCount() {
-        SysUser plainUser = user(OTHER, UserRole.USER, UserStatus.ENABLED);
-
-        assertThatCode(() -> UserGuards.checkUpdate(plainUser, ME, true, false, () -> 1))
+        assertThatCode(() -> UserGuards.checkUpdate(OTHER, ME, false, false, true, false,
+                () -> {
+                    throw new AssertionError("admin count must not be read");
+                }))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> UserGuards.checkUpdate(plainUser, ME, false, true, () -> 1))
+        assertThatCode(() -> UserGuards.checkUpdate(OTHER, ME, false, false, false, true,
+                () -> {
+                    throw new AssertionError("admin count must not be read");
+                }))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void adminCannotDeleteThemselves() {
-        assertThatThrownBy(() -> UserGuards.checkDelete(
-                List.of(user(ME, UserRole.ADMIN, UserStatus.ENABLED)), ME, () -> 2))
+        assertThatThrownBy(() -> UserGuards.checkDelete(true, 1, () -> {
+            throw new AssertionError("admin count must not be read");
+        }))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("cannot delete yourself");
     }
 
     @Test
     void deletingAdminsMustLeaveOneActive() {
-        List<SysUser> oneAdmin = List.of(user(OTHER, UserRole.ADMIN, UserStatus.ENABLED));
-        List<SysUser> twoAdmins = List.of(
-                user(OTHER, UserRole.ADMIN, UserStatus.ENABLED),
-                user(3L, UserRole.ADMIN, UserStatus.ENABLED));
-
-        assertThatThrownBy(() -> UserGuards.checkDelete(oneAdmin, ME, () -> 1))
+        assertThatThrownBy(() -> UserGuards.checkDelete(false, 1, () -> 1))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("At least one active administrator");
-        assertThatThrownBy(() -> UserGuards.checkDelete(twoAdmins, ME, () -> 2))
+        assertThatThrownBy(() -> UserGuards.checkDelete(false, 2, () -> 2))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("At least one active administrator");
-        assertThatCode(() -> UserGuards.checkDelete(twoAdmins, ME, () -> 3))
+        assertThatCode(() -> UserGuards.checkDelete(false, 2, () -> 3))
                 .doesNotThrowAnyException();
     }
 
     @Test
-    void deletingNonAdminsIsNotLimitedByTheAdminCount() {
-        assertThatCode(() -> UserGuards.checkDelete(
-                List.of(user(OTHER, UserRole.USER, UserStatus.ENABLED)), ME, () -> 1))
+    void deletingNonAdminsNeverNeedsTheAdminCount() {
+        assertThatCode(() -> UserGuards.checkDelete(false, 0, () -> {
+            throw new AssertionError("admin count must not be read");
+        }))
                 .doesNotThrowAnyException();
-        // An admin who is already disabled is not one of the admins being taken away.
-        assertThatCode(() -> UserGuards.checkDelete(
-                List.of(user(OTHER, UserRole.ADMIN, UserStatus.DISABLED)), ME, () -> 1))
-                .doesNotThrowAnyException();
-    }
-
-    private static SysUser user(long id, UserRole role, UserStatus status) {
-        SysUser user = new SysUser();
-        user.setId(id);
-        user.setRole(role);
-        user.setStatus(status);
-        return user;
     }
 }
