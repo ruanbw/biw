@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.biw.common.exception.BizException;
+import com.biw.convert.UserConverter;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.LoginRequest;
 import com.biw.entity.user.dto.ResetPasswordRequest;
@@ -31,9 +32,11 @@ import java.util.Objects;
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
     private final PasswordEncoder passwordEncoder;
+    private final UserConverter userConverter;
 
-    public UserServiceImpl(PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(PasswordEncoder passwordEncoder, UserConverter userConverter) {
         this.passwordEncoder = passwordEncoder;
+        this.userConverter = userConverter;
     }
 
     @Override
@@ -90,15 +93,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         }
         checkPasswordBytes(request.password());
 
-        SysUser user = new SysUser();
-        user.setUsername(username);
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setNickname(request.nickname() == null ? "" : request.nickname().trim());
-        user.setRole(request.role() == null ? "USER" : request.role());
-        user.setStatus(request.status() == null ? 1 : request.status());
-        user.setDeleted(0);
-        user.setCreatedAt(OffsetDateTime.now());
-        user.setUpdatedAt(OffsetDateTime.now());
+        SysUser user = userConverter.toEntity(request, username, passwordEncoder.encode(request.password()));
         try {
             save(user);
         } catch (DuplicateKeyException e) {
@@ -132,16 +127,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                     "At least one active administrator must remain");
         }
 
-        if (request.nickname() != null) {
-            user.setNickname(request.nickname().trim());
-        }
-        if (request.role() != null) {
-            user.setRole(request.role());
-        }
-        if (request.status() != null) {
-            user.setStatus(request.status());
-        }
-        user.setUpdatedAt(OffsetDateTime.now());
+        userConverter.applyUpdate(request, user);
         updateById(user);
 
         if (disabling) {
