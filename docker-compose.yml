@@ -20,7 +20,9 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - biw-pgdata:/var/lib/postgresql/data
+      # PostgreSQL 18 moved PGDATA to /var/lib/postgresql/<major>/data, so the mount has to be
+      # the parent directory; mounting /var/lib/postgresql/data makes the image refuse to start.
+      - biw-pgdata:/var/lib/postgresql
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U biw -d biw"]
