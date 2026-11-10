@@ -74,6 +74,12 @@ desktop.ini
 .env
 .env.*
 !.env.example
+# The admin bundle's env files hold no secrets: they only name the API origin, the
+# success code, and the UI title. Vite reads them at build time, so they must be
+# committed or a fresh clone cannot build.
+!admin/.env
+!admin/.env.test
+!admin/.env.prod
 *.local.yml
 *.local.yaml
 *.local.properties
