@@ -149,12 +149,22 @@ INSERT INTO sys_permission (code, name, description) VALUES
     ('permission:read', '查看权限', '查看权限码目录')
 ON CONFLICT DO NOTHING;
 
--- First admin: insert a user with a BCrypt hash, then attach the ADMIN role.
+-- First admin, created so a fresh database is usable immediately.
+--
+-- Username: admin
+-- Password: 12345678
+--
+-- The hash below is BCrypt with 12 rounds, matching PasswordEncoderConfig. Change the password
+-- before exposing this service anywhere but localhost: the account holds every permission.
+-- To set your own:
 --   htpasswd -bnBC 12 "" 'your-password' | cut -d: -f2
---   INSERT INTO sys_user (username, password_hash, nickname)
---   VALUES ('admin', '$2y$12$...', 'Admin');
---   INSERT INTO sys_user_role (user_id, role_id)
---   SELECT u.id, r.id
---   FROM sys_user u
---   JOIN sys_role r ON r.code = 'ADMIN'
---   WHERE u.username = 'admin';
+INSERT INTO sys_user (username, password_hash, nickname)
+VALUES ('admin', '$2y$12$CCK1G2lRYBXNjw6gcsksxOANvhgh38Dx9urP3Af86qYEc.tSYBPUi', '管理员')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_user_role (user_id, role_id)
+SELECT u.id, r.id
+FROM sys_user u
+JOIN sys_role r ON r.code = 'ADMIN'
+WHERE u.username = 'admin' AND u.deleted = 0
+ON CONFLICT DO NOTHING;
