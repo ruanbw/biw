@@ -193,8 +193,11 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         // Serialize against assignPermissions and against a user update that is resolving this
         // role, so the count cannot be invalidated between the check and the logic delete.
         SysRole role = requireForUpdate(id);
-        RoleGuards.checkDelete(role, userRoleMapper.countUsersByRoleId(id));
+        // Authorization first: telling a manager who may not touch this role that it is still in
+        // use hands them a fact about a role that is none of their business. Built-in roles still
+        // answer BUILTIN_ROLE_IMMUTABLE from the guard below.
         checkCanModifyRole(role);
+        RoleGuards.checkDelete(role, userRoleMapper.countUsersByRoleId(id));
 
         removeById(id);
         // A logic delete keeps the row, so the FK cascade never fires and the links need removing.
