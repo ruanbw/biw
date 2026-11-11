@@ -61,10 +61,10 @@ services:
       retries: 5
     restart: unless-stopped
 
-    # No capabilities: redis needs none, and dropping them bounds what a compromised image or a
-    # future `command` override can do.
-    cap_drop:
-      - ALL
+    # `cap_drop: ALL` was tried here and does not work: the image's entrypoint chowns /data to the
+    # redis user on first start, which needs CAP_CHOWN, and the container crash-loops with
+    # "Can't open or create append-only dir appendonlydir: Permission denied". `no-new-privileges`
+    # is the part that survives contact with a real start.
     security_opt:
       - no-new-privileges:true
     networks:
