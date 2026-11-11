@@ -10,4 +10,13 @@ public record LoginVO(
         @Schema(description = "token 有效期（秒），-1 表示永久有效", example = "604800") long timeout,
         @Schema(description = "登录用户信息") SysUser user
 ) {
+
+    /**
+     * Never render the session token. Spring MVC logs the response body at DEBUG level, and a
+     * token in a log file is a usable credential for as long as it lives.
+     */
+    @Override
+    public String toString() {
+        return "LoginVO[tokenName=" + tokenName + ", tokenValue=<redacted>, timeout=" + timeout + "]";
+    }
 }

@@ -18,7 +18,7 @@ public record CreateUserRequest(
                 message = "Username may contain letters, digits, '_', '.', '-' and must start with a letter or digit")
         String username,
 
-        @Schema(description = "密码：8 到 64 个字符，UTF-8 编码后不超过 72 字节", example = "Passw0rd!")
+        @Schema(description = "密码：8 到 64 个字符，UTF-8 编码后不超过 72 字节", example = "P@ssw0rd-example")
         @NotBlank(message = "Password must not be blank")
         @Size(min = 8, max = 64, message = "Password must be between 8 and 64 characters")
         String password,

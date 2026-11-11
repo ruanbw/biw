@@ -11,9 +11,19 @@ public record LoginRequest(
         @Size(max = 64, message = "Username must not exceed 64 characters")
         String username,
 
-        @Schema(description = "密码，UTF-8 编码后不超过 72 字节", example = "Passw0rd!")
+        @Schema(description = "密码，UTF-8 编码后不超过 72 字节", example = "P@ssw0rd-example")
         @NotBlank(message = "Password must not be blank")
         @Size(min = 6, max = 128, message = "Password must be between 6 and 128 characters")
         String password
 ) {
+
+    /**
+     * Never render the credential. Spring MVC echoes the bound request body at DEBUG level
+     * ({@code RequestResponseBodyMethodProcessor}), and the generated record {@code toString}
+     * would put the plain password into the log file.
+     */
+    @Override
+    public String toString() {
+        return "LoginRequest[username=" + username + ", password=<redacted>]";
+    }
 }
