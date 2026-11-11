@@ -13,7 +13,6 @@ import { useAuthStore } from '../auth';
 import { useTabStore } from '../tab';
 import {
   filterAuthRoutesByPermissions,
-  filterAuthRoutesByRoles,
   filterRoutesByDev,
   getBreadcrumbsByRoute,
   getCacheRouteNames,

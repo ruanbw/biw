@@ -58,6 +58,52 @@ const local: App.I18n.Schema = {
     refreshToken: '请求的token已过期，刷新token',
     tokenExpired: 'token已过期'
   },
+  /**
+   * 一条对应后端 `BizCode` 的一个 `errorCode`。
+   *
+   * 请求层优先显示这里的文案，本地化缺失时才退回后端 message，所以后端改文案不需要前端跟着发版；
+   * 反过来，新增 errorCode 时必须在这里和 en-us.ts 同时补上。
+   */
+  error: {
+    VALIDATION_FAILED: '提交的内容未通过校验，请检查后重试',
+    MALFORMED_BODY: '请求内容格式错误，无法解析',
+    UNSUPPORTED_MEDIA_TYPE: '不支持的请求内容类型',
+    MISSING_PARAMETER: '缺少必要的请求参数',
+    INVALID_PARAMETER: '请求参数格式不正确',
+    PAGE_TOO_DEEP: '页码过深，请缩小搜索范围后重试',
+    IDS_OUT_OF_RANGE: '一次最多操作 100 项，请分批提交',
+    USERNAME_REQUIRED: '用户名不能为空',
+    PASSWORD_TOO_LONG: '密码不能超过 72 字节',
+    ROLE_NAME_REQUIRED: '角色名称不能为空',
+    UNKNOWN_ROLE: '角色不存在或已被删除',
+    UNKNOWN_PERMISSION: '权限不存在或已被删除',
+    ENDPOINT_NOT_FOUND: '接口不存在',
+    METHOD_NOT_ALLOWED: '不支持该请求方法',
+    NOT_ACCEPTABLE: '无法返回可接受的响应格式',
+    BAD_CREDENTIALS: '用户名或密码不正确',
+    SESSION_INVALID: '登录状态已失效，请重新登录',
+    MISSING_CREDENTIAL: '缺少登录凭证，请重新登录',
+    INVALID_CREDENTIAL: '登录凭证无效，请重新登录',
+    SESSION_EXPIRED: '登录已过期，请重新登录',
+    SESSION_REPLACED: '账号已在其他地方登录，请重新登录',
+    SESSION_KICKED: '账号已被强制下线，请重新登录',
+    LOGIN_THROTTLED: '登录失败次数过多，请稍后再试',
+    PERMISSION_DENIED: '缺少该操作所需的权限',
+    ROLE_DENIED: '缺少该操作所需的角色',
+    ADMIN_REQUIRED: '仅管理员可以执行该操作',
+    CANNOT_GRANT_EXCEEDING: '不能授予自己未拥有的权限',
+    CANNOT_MODIFY_EXCEEDING: '不能修改权限高于自己的用户或角色',
+    SELF_LOCKOUT: '不能修改自己的角色或禁用自己',
+    SELF_DELETE: '不能删除自己',
+    LAST_ADMIN: '至少需要保留一个启用状态的管理员',
+    BUILTIN_ROLE_IMMUTABLE: '内置角色不可修改',
+    ROLE_IN_USE: '该角色仍有用户在用，无法删除',
+    USER_NOT_FOUND: '用户不存在',
+    ROLE_NOT_FOUND: '角色不存在',
+    USERNAME_TAKEN: '用户名已存在',
+    ROLE_CODE_TAKEN: '角色编码已存在',
+    INTERNAL_ERROR: '服务器内部错误，请稍后重试'
+  },
   theme: {
     themeDrawerTitle: '主题配置',
     tabs: {
@@ -273,7 +319,8 @@ const local: App.I18n.Schema = {
     },
     home: {
       greeting: '你好，{userName}',
-      desc: '这里是 biw 的用户、角色与权限管理后台。'
+      desc: '这里是 biw 的用户、角色与权限管理后台。',
+      noPermission: '当前账号未分配任何权限，请联系管理员'
     },
     systemUser: {
       keywordPlaceholder: '搜索用户名或昵称',
@@ -293,6 +340,7 @@ const local: App.I18n.Schema = {
       passwordTooManyBytes: '密码不能超过 72 字节（中文每个约 3 字节）',
       resetPasswordTitle: '重置密码',
       newPassword: '新密码',
+      selfResetPasswordTip: '这是你自己的账号：重置后当前会话会立即失效，你将退出登录。',
       enabled: '启用',
       disabled: '禁用',
       noRole: '无角色'
@@ -317,6 +365,7 @@ const local: App.I18n.Schema = {
       permissionTip: '提交的权限会整体替换角色原有权限，留空表示撤销全部权限。',
       permissionEmpty: '未选择任何权限',
       permissionBuiltInTip: '内置角色的权限不可修改。',
+      permissionCatalogFailed: '权限目录加载失败，请重试后再分配权限。',
       builtInRoleTip: '内置角色不能禁用或删除。',
       assignSuccess: '权限已更新',
       enabled: '启用',

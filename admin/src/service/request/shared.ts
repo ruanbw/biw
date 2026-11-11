@@ -13,6 +13,16 @@ export function getTokenHeader() {
 }
 
 export function showErrorMsg(state: RequestInstanceState, message: string) {
+  /**
+   * `window.$message` is mounted by the app, so it does not exist yet while the initial route
+   * guard is fetching the session. Pushing onto the stack anyway would leave the message there
+   * with no `onLeave` to ever remove it, and every later error with the same text would be
+   * dropped as a duplicate. Return before touching the stack.
+   */
+  const messageApi = window.$message;
+
+  if (!messageApi) return;
+
   if (!state.errMsgStack?.length) {
     state.errMsgStack = [];
   }
@@ -22,7 +32,7 @@ export function showErrorMsg(state: RequestInstanceState, message: string) {
   if (!isExist) {
     state.errMsgStack.push(message);
 
-    window.$message?.error(message, {
+    messageApi.error(message, {
       onLeave: () => {
         state.errMsgStack = state.errMsgStack.filter(msg => msg !== message);
 

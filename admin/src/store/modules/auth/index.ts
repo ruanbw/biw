@@ -34,9 +34,6 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     buttons: []
   });
 
-  /** Whether the account holds the ADMIN role, which answers every permission check. */
-  const isStaticSuper = computed(() => userInfo.roles.includes('ADMIN'));
-
   /** Is login */
   const isLogin = computed(() => Boolean(token.value));
 
@@ -204,7 +201,6 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
   return {
     token,
     userInfo,
-    isStaticSuper,
     isLogin,
     loginLoading,
     resetStore,

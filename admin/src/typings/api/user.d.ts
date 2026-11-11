@@ -78,5 +78,14 @@ declare namespace Api {
       /** Re-display already chosen ids, including disabled ones; max 100 */
       ids?: number[];
     }
+
+    /**
+     * The query `GET /users/options` actually receives.
+     *
+     * `ids` is a comma separated string on the wire because an array serialises as
+     * `ids[0]=1&ids[1]=2`, which Spring's `@RequestParam List<Long> ids` cannot bind. Callers
+     * keep passing a plain array; the API function joins it.
+     */
+    type OptionsQuery = Omit<OptionsParams, 'ids'> & { ids?: string };
   }
 }

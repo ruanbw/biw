@@ -11,12 +11,22 @@ export function fetchGetRoleList(params: Api.Role.SearchParams) {
 /**
  * Picker entries. `user:write` may call this too, because the user form needs
  * role names.
+ *
+ * `ids` is sent comma separated for the same reason as in `fetchGetUserOptions`: an array
+ * would serialise as `ids[0]=1&ids[1]=2` and Spring's `@RequestParam List<Long> ids` would
+ * silently ignore it.
  */
-export function fetchGetRoleOptions(params: Api.Role.OptionsParams) {
+export function fetchGetRoleOptions({ ids, ...params }: Api.Role.OptionsParams) {
+  const query: Api.Role.OptionsQuery = params;
+
+  if (ids?.length) {
+    query.ids = ids.join(',');
+  }
+
   return request<Api.Role.Option[]>({
     url: '/roles/options',
     method: 'get',
-    params
+    params: query
   });
 }
 

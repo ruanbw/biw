@@ -58,6 +58,47 @@ const local: App.I18n.Schema = {
     refreshToken: 'The requested token has expired, refresh the token',
     tokenExpired: 'The requested token has expired'
   },
+  /** One message per backend `BizCode.errorCode`; must stay in step with zh-cn.ts. */
+  error: {
+    VALIDATION_FAILED: 'The submitted values failed validation. Check them and try again',
+    MALFORMED_BODY: 'The request body is malformed and cannot be read',
+    UNSUPPORTED_MEDIA_TYPE: 'Unsupported content type',
+    MISSING_PARAMETER: 'A required parameter is missing',
+    INVALID_PARAMETER: 'A request parameter has the wrong type',
+    PAGE_TOO_DEEP: 'That page is too deep; narrow the search instead',
+    IDS_OUT_OF_RANGE: 'Select between 1 and 100 items per request',
+    USERNAME_REQUIRED: 'Username must not be blank',
+    PASSWORD_TOO_LONG: 'Password must not exceed 72 bytes',
+    ROLE_NAME_REQUIRED: 'Role name must not be blank',
+    UNKNOWN_ROLE: 'That role no longer exists',
+    UNKNOWN_PERMISSION: 'That permission no longer exists',
+    ENDPOINT_NOT_FOUND: 'Endpoint not found',
+    METHOD_NOT_ALLOWED: 'Method not allowed',
+    NOT_ACCEPTABLE: 'No acceptable response format is available',
+    BAD_CREDENTIALS: 'Incorrect username or password',
+    SESSION_INVALID: 'Your session is no longer valid. Please sign in again',
+    MISSING_CREDENTIAL: 'The login credential is missing. Please sign in again',
+    INVALID_CREDENTIAL: 'The login credential is invalid. Please sign in again',
+    SESSION_EXPIRED: 'Your session has expired. Please sign in again',
+    SESSION_REPLACED: 'This account signed in elsewhere. Please sign in again',
+    SESSION_KICKED: 'This account was signed out. Please sign in again',
+    LOGIN_THROTTLED: 'Too many failed sign-in attempts. Try again later',
+    PERMISSION_DENIED: 'You do not have the required permission',
+    ROLE_DENIED: 'You do not have the required role',
+    ADMIN_REQUIRED: 'Only an administrator can do that',
+    CANNOT_GRANT_EXCEEDING: 'You cannot grant permissions you do not have',
+    CANNOT_MODIFY_EXCEEDING: 'You cannot modify a subject with permissions you do not have',
+    SELF_LOCKOUT: 'You cannot change your own role or disable yourself',
+    SELF_DELETE: 'You cannot delete yourself',
+    LAST_ADMIN: 'At least one enabled administrator must remain',
+    BUILTIN_ROLE_IMMUTABLE: 'Built-in roles cannot be modified',
+    ROLE_IN_USE: 'That role is still assigned to users',
+    USER_NOT_FOUND: 'User not found',
+    ROLE_NOT_FOUND: 'Role not found',
+    USERNAME_TAKEN: 'That username is already taken',
+    ROLE_CODE_TAKEN: 'That role code is already taken',
+    INTERNAL_ERROR: 'Internal server error. Please try again later'
+  },
   theme: {
     themeDrawerTitle: 'Theme Configuration',
     tabs: {
@@ -277,7 +318,8 @@ const local: App.I18n.Schema = {
     },
     home: {
       greeting: 'Hello, {userName}',
-      desc: 'Manage users, roles and permissions of biw here.'
+      desc: 'Manage users, roles and permissions of biw here.',
+      noPermission: 'No permissions have been granted to this account. Ask an administrator.'
     },
     systemUser: {
       keywordPlaceholder: 'Search username or nickname',
@@ -297,6 +339,7 @@ const local: App.I18n.Schema = {
       passwordTooManyBytes: 'Password must not exceed 72 bytes (about 24 Chinese characters)',
       resetPasswordTitle: 'Reset password',
       newPassword: 'New password',
+      selfResetPasswordTip: 'This is your own account: resetting signs you out immediately.',
       enabled: 'Enabled',
       disabled: 'Disabled',
       noRole: 'No role'
@@ -321,6 +364,7 @@ const local: App.I18n.Schema = {
       permissionTip: 'The submitted set replaces the current one; an empty selection revokes everything.',
       permissionEmpty: 'No permission selected',
       permissionBuiltInTip: 'Built-in role permissions cannot be changed.',
+      permissionCatalogFailed: 'Could not load the permission catalog. Try again before assigning permissions.',
       builtInRoleTip: 'Built-in roles cannot be disabled or deleted.',
       assignSuccess: 'Permissions updated',
       enabled: 'Enabled',

@@ -12,12 +12,22 @@ export function fetchGetUserList(params: Api.User.SearchParams) {
 /**
  * Picker entries: enabled users only, or exactly the ids passed in `ids`
  * (disabled ones included, so a form can re-display an existing selection).
+ *
+ * `ids` goes on the wire comma separated: `@sa/axios` serialises with `qs.stringify`, which
+ * turns an array into `ids[0]=1&ids[1]=2`, and Spring's `@RequestParam List<Long> ids` cannot
+ * bind that — it silently answers the unfiltered list instead of refusing the request.
  */
-export function fetchGetUserOptions(params: Api.User.OptionsParams) {
+export function fetchGetUserOptions({ ids, ...params }: Api.User.OptionsParams) {
+  const query: Api.User.OptionsQuery = params;
+
+  if (ids?.length) {
+    query.ids = ids.join(',');
+  }
+
   return request<Api.User.Option[]>({
     url: '/users/options',
     method: 'get',
-    params
+    params: query
   });
 }
 

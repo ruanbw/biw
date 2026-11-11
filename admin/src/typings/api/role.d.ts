@@ -75,7 +75,14 @@ declare namespace Api {
     interface OptionsParams {
       keyword?: string;
       limit?: number;
+      /** Re-display already chosen ids, including disabled ones; max 100 */
       ids?: number[];
     }
+
+    /**
+     * The query `GET /roles/options` actually receives: `ids` is comma separated, because an
+     * array serialises as `ids[0]=1&ids[1]=2` and Spring cannot bind that to `List<Long>`.
+     */
+    type OptionsQuery = Omit<OptionsParams, 'ids'> & { ids?: string };
   }
 }

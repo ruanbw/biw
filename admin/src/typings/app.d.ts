@@ -370,6 +370,13 @@ declare namespace App {
         refreshToken: string;
         tokenExpired: string;
       };
+      /**
+       * One message per backend `BizCode.errorCode`.
+       *
+       * Keyed by `App.Service.ErrorCode`, so a code the backend can answer with but the
+       * locales do not cover fails type-checking instead of reaching the screen in English.
+       */
+      error: Record<Service.ErrorCode, string>;
       theme: {
         themeDrawerTitle: string;
         tabs: {
@@ -523,6 +530,7 @@ declare namespace App {
         home: {
           greeting: string;
           desc: string;
+          noPermission: string;
         };
         systemUser: {
           keywordPlaceholder: string;
@@ -542,6 +550,7 @@ declare namespace App {
           passwordTooManyBytes: string;
           resetPasswordTitle: string;
           newPassword: string;
+          selfResetPasswordTip: string;
           enabled: string;
           disabled: string;
           noRole: string;
@@ -566,6 +575,7 @@ declare namespace App {
           permissionTip: string;
           permissionEmpty: string;
           permissionBuiltInTip: string;
+          permissionCatalogFailed: string;
           builtInRoleTip: string;
           assignSuccess: string;
           enabled: string;
@@ -635,6 +645,60 @@ declare namespace App {
 
   /** Service namespace */
   namespace Service {
+    /**
+     * `errorCode` of the backend `Result`, mirroring `com.biw.common.error.BizCode`.
+     *
+     * These are machine identifiers: the message is localized on this side as `error.<code>`,
+     * so rewording a message on the server does not need a frontend release. Keep this list in
+     * step with the enum; a missing member only costs a type error, but a missing locale entry
+     * would show English to a Chinese user.
+     */
+    type ErrorCode =
+      // request shape
+      | 'VALIDATION_FAILED'
+      | 'MALFORMED_BODY'
+      | 'UNSUPPORTED_MEDIA_TYPE'
+      | 'MISSING_PARAMETER'
+      | 'INVALID_PARAMETER'
+      | 'PAGE_TOO_DEEP'
+      | 'IDS_OUT_OF_RANGE'
+      | 'USERNAME_REQUIRED'
+      | 'PASSWORD_TOO_LONG'
+      | 'ROLE_NAME_REQUIRED'
+      | 'UNKNOWN_ROLE'
+      | 'UNKNOWN_PERMISSION'
+      | 'ENDPOINT_NOT_FOUND'
+      | 'METHOD_NOT_ALLOWED'
+      | 'NOT_ACCEPTABLE'
+      // authentication
+      | 'BAD_CREDENTIALS'
+      | 'SESSION_INVALID'
+      | 'MISSING_CREDENTIAL'
+      | 'INVALID_CREDENTIAL'
+      | 'SESSION_EXPIRED'
+      | 'SESSION_REPLACED'
+      | 'SESSION_KICKED'
+      | 'LOGIN_THROTTLED'
+      // authorization
+      | 'PERMISSION_DENIED'
+      | 'ROLE_DENIED'
+      | 'ADMIN_REQUIRED'
+      | 'CANNOT_GRANT_EXCEEDING'
+      | 'CANNOT_MODIFY_EXCEEDING'
+      | 'SELF_LOCKOUT'
+      | 'SELF_DELETE'
+      | 'LAST_ADMIN'
+      | 'BUILTIN_ROLE_IMMUTABLE'
+      | 'ROLE_IN_USE'
+      // resources
+      | 'USER_NOT_FOUND'
+      | 'ROLE_NOT_FOUND'
+      // conflicts
+      | 'USERNAME_TAKEN'
+      | 'ROLE_CODE_TAKEN'
+      // system
+      | 'INTERNAL_ERROR';
+
     /** Other baseURL key */
     type OtherBaseURLKey = 'demo';
 

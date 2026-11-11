@@ -3,6 +3,7 @@ import { computed, h, reactive, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import { NButton, NTag } from 'naive-ui';
 import type { FormInst, FormItemRule, FormRules, SelectOption } from 'naive-ui';
+import { useDebounceFn } from '@vueuse/core';
 import dayjs from 'dayjs';
 import type { FlatResponseData } from '@sa/axios';
 import {
@@ -19,6 +20,7 @@ import { useAuth } from '@/hooks/business/auth';
 import { transformPage } from '@/hooks/business/pagination';
 import type { PageEnvelope } from '@/hooks/business/pagination';
 import { useNaivePaginatedTable, useTableOperate } from '@/hooks/common/table';
+import { useAuthStore } from '@/store/modules/auth';
 
 defineOptions({
   name: 'SystemUser'
@@ -27,6 +29,8 @@ defineOptions({
 type User = Api.User.User;
 
 const { hasAuth } = useAuth();
+
+const authStore = useAuthStore();
 
 const canWrite = computed(() => hasAuth('user:write'));
 
@@ -42,10 +46,11 @@ const query = reactive({
   keyword: ''
 });
 
-const statusOptions: SelectOption[] = [
+/** Inside `computed` so the labels follow the active locale; a plain array would freeze them. */
+const statusOptions = computed<SelectOption[]>(() => [
   { label: $t('page.systemUser.enabled'), value: 'ENABLED' },
   { label: $t('page.systemUser.disabled'), value: 'DISABLED' }
-];
+]);
 
 const userColumns = computed<NaiveUI.TableColumn<User>[]>(() => [
   // Selection only exists to feed the batch delete the caller may not have.
@@ -134,7 +139,7 @@ const {
   checkedRowKeys,
   onBatchDeleted,
   onDeleted
-} = useTableOperate(data as Ref<User[]>, 'id', getData);
+} = useTableOperate(data as Ref<User[]>, 'id', getData, pagination);
 
 function search() {
   // A changed page triggers the hook's watch, which refreshes for us.
@@ -173,24 +178,97 @@ const roleOptions = ref<SelectOption[]>([]);
 const roleLoading = ref(false);
 
 /**
+ * The sequence number of the newest request that writes the role picker.
+ *
+ * Both a typed search and the edit-mode lookup fill it, so one shared counter is what keeps a
+ * slow answer for "ad" from replacing the options for "admin", or a search from overwriting the
+ * resolved names of the row being edited.
+ */
+let roleOptionsSeq = 0;
+
+/** Turn an `OptionVO` into a picker entry: the label is the role name, the value its code. */
+function toRoleOption(item: Api.Role.Option): SelectOption {
+  return {
+    label: `${item.label} (${item.description})`,
+    value: item.description,
+    disabled: item.disabled
+  };
+}
+
+/**
  * Load role pickers.
  *
  * The role option answers the role id as `value` and the role code as `description`, and it is
  * the code the user endpoints submit, so `value` here is the description.
  */
 async function loadRoleOptions(keyword?: string) {
+  const seq = ++roleOptionsSeq;
+
   roleLoading.value = true;
 
-  const { data: options, error } = await fetchGetRoleOptions({ keyword: keyword || undefined, limit: 50 });
+  try {
+    const { data: options, error } = await fetchGetRoleOptions({ keyword: keyword || undefined, limit: 50 });
 
-  roleLoading.value = false;
+    // A newer request owns the picker now.
+    if (seq !== roleOptionsSeq) return;
 
-  if (!error) {
-    roleOptions.value = options.map(item => ({
-      label: `${item.label} (${item.description})`,
-      value: item.description,
-      disabled: item.disabled
+    if (error) {
+      // Swallowing this leaves an empty picker with no explanation, which reads as "no roles
+      // exist" instead of "the request failed".
+      window.$message?.error(error.message);
+      return;
+    }
+
+    roleOptions.value = options.map(toRoleOption);
+  } finally {
+    if (seq === roleOptionsSeq) {
+      roleLoading.value = false;
+    }
+  }
+}
+
+/** `NSelect` fires `search` on every keystroke; debounce before spending a request per key. */
+const searchRoleOptions = useDebounceFn((keyword: string) => loadRoleOptions(keyword), 300);
+
+/**
+ * Resolve the role codes of the row being edited into options that carry the role *name*.
+ *
+ * The row only holds codes, so the enabled catalogue is used as a code → id index and the ids
+ * are then fetched back, which is what `OptionVO.description` needs. Any code the lookup cannot
+ * resolve keeps the bare code as its label — a stale name is worse than a visible code.
+ */
+async function loadRoleOptionsByCodes(codes: string[]) {
+  const seq = ++roleOptionsSeq;
+
+  roleLoading.value = true;
+  // Show the codes immediately; the names replace them once the lookup answers.
+  roleOptions.value = codes.map(code => ({ label: code, value: code }));
+
+  try {
+    if (!codes.length) return;
+
+    const { data: catalogue, error: catalogueError } = await fetchGetRoleOptions({ limit: 50 });
+
+    if (seq !== roleOptionsSeq || catalogueError || !catalogue) return;
+
+    const ids = catalogue.filter(item => codes.includes(item.description)).map(item => item.value);
+
+    if (!ids.length) return;
+
+    const { data: selected, error: selectedError } = await fetchGetRoleOptions({ ids });
+
+    if (seq !== roleOptionsSeq || selectedError || !selected) return;
+
+    const labelByCode = new Map(selected.map(item => [item.description, item.label]));
+
+    roleOptions.value = codes.map(code => ({
+      label: labelByCode.get(code) ?? code,
+      value: code
     }));
+  } finally {
+    if (seq === roleOptionsSeq) {
+      roleLoading.value = false;
+    }
   }
 }
 
@@ -218,7 +296,8 @@ watch(editingData, value => {
   formModel.roleCodes = [...(value.roleCodes ?? [])];
   formModel.status = value.status;
   formModel.password = '';
-  roleOptions.value = formModel.roleCodes.map(code => ({ label: code, value: code }));
+
+  loadRoleOptionsByCodes(formModel.roleCodes);
 });
 
 // ---------------------------------------------------------------
@@ -309,6 +388,17 @@ async function submitForm() {
   if (!result.error) {
     window.$message?.success(operateType.value === 'add' ? $t('common.addSuccess') : $t('common.updateSuccess'));
     closeDrawer();
+
+    if (operateType.value === 'add') {
+      // The list is newest first, so a new user is only visible on the first page. Changing the
+      // page fires the table's own watcher, which refetches; on page 1 there is nothing to
+      // change, so refresh directly.
+      if (pagination.page !== 1) {
+        pagination.page = 1;
+        return;
+      }
+    }
+
     await getData();
   }
 }
@@ -332,20 +422,18 @@ function confirmDelete(id: number) {
   });
 }
 
-function handleBatchDelete() {
-  window.$dialog?.warning({
-    title: $t('common.tip'),
-    content: $t('common.confirmDelete'),
-    positiveText: $t('common.confirm'),
-    negativeText: $t('common.cancel'),
-    onPositiveClick: async () => {
-      const { error } = await fetchBatchDeleteUsers({ ids: checkedRowKeys.value.map(Number) });
+/**
+ * Batch delete.
+ *
+ * The "batch delete" button in `TableHeaderOperation` already asks for confirmation through an
+ * `NPopconfirm`, so a second dialog here would ask the same question twice.
+ */
+async function handleBatchDelete() {
+  const { error } = await fetchBatchDeleteUsers({ ids: checkedRowKeys.value.map(Number) });
 
-      if (!error) {
-        await onBatchDeleted();
-      }
-    }
-  });
+  if (!error) {
+    await onBatchDeleted();
+  }
 }
 
 // ---------------------------------------------------------------
@@ -362,6 +450,11 @@ const resetTargetId = ref(0);
  */
 const resetModel = reactive({ newPassword: '' });
 
+/** The reset revokes every session of the target, including the caller's own. */
+const resetTargetIsSelf = computed(() => String(resetTargetId.value) === authStore.userInfo.userId);
+
+const resetSubmitting = ref(false);
+
 function openResetPassword(id: number) {
   resetTargetId.value = id;
   resetModel.newPassword = '';
@@ -376,6 +469,9 @@ watch(resetVisible, visible => {
 });
 
 async function submitResetPassword() {
+  // A double click would send the same reset twice and revoke the sessions twice.
+  if (resetSubmitting.value) return;
+
   const valid = await resetFormRef.value
     ?.validate()
     .then(() => true)
@@ -385,11 +481,17 @@ async function submitResetPassword() {
     return;
   }
 
-  const { error } = await fetchResetUserPassword(resetTargetId.value, { newPassword: resetModel.newPassword });
+  resetSubmitting.value = true;
 
-  if (!error) {
-    window.$message?.success($t('common.modifySuccess'));
-    resetVisible.value = false;
+  try {
+    const { error } = await fetchResetUserPassword(resetTargetId.value, { newPassword: resetModel.newPassword });
+
+    if (!error) {
+      window.$message?.success($t('common.modifySuccess'));
+      resetVisible.value = false;
+    }
+  } finally {
+    resetSubmitting.value = false;
   }
 }
 
@@ -473,7 +575,7 @@ const drawerTitle = computed(() =>
               clearable
               :options="roleOptions"
               :loading="roleLoading"
-              @search="key => loadRoleOptions(key)"
+              @search="searchRoleOptions"
             />
           </NFormItem>
           <NFormItem :label="$t('page.systemUser.status')">
@@ -490,6 +592,9 @@ const drawerTitle = computed(() =>
     </NDrawer>
 
     <NModal v-model:show="resetVisible" preset="card" class="w-400px" :title="$t('page.systemUser.resetPasswordTitle')">
+      <NAlert v-if="resetTargetIsSelf" type="warning" :bordered="false" class="mb-16px">
+        {{ $t('page.systemUser.selfResetPasswordTip') }}
+      </NAlert>
       <NForm ref="resetFormRef" label-placement="top" :model="resetModel" :rules="resetRules">
         <NFormItem path="newPassword" :label="$t('page.systemUser.newPassword')">
           <NInput v-model:value="resetModel.newPassword" type="password" show-password-on="click" :maxlength="64" />
@@ -498,7 +603,9 @@ const drawerTitle = computed(() =>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="resetVisible = false">{{ $t('common.cancel') }}</NButton>
-          <NButton type="primary" @click="submitResetPassword">{{ $t('common.confirm') }}</NButton>
+          <NButton type="primary" :loading="resetSubmitting" :disabled="resetSubmitting" @click="submitResetPassword">
+            {{ $t('common.confirm') }}
+          </NButton>
         </NSpace>
       </template>
     </NModal>

@@ -41,6 +41,16 @@ const shortcuts = computed(() => {
 
   return items.filter(item => hasAuth(item.permission));
 });
+
+/**
+ * An account with no permission at all sees none of the shortcuts.
+ *
+ * An empty grid looks like a broken page, so say why it is empty instead. The admin wildcard
+ * `*` passes every check, so it never reaches this state.
+ */
+const hasNoPermission = computed(
+  () => shortcuts.value.length === 0 && !authStore.userInfo.buttons.includes('*')
+);
 </script>
 
 <template>
@@ -51,7 +61,10 @@ const shortcuts = computed(() => {
         <p class="text-14px text-#666">{{ $t('page.home.desc') }}</p>
       </NSpace>
     </NCard>
-    <NGrid :x-gap="16" :y-gap="16" responsive="screen" item-responsive>
+    <NCard v-if="hasNoPermission" :bordered="false" class="card-wrapper">
+      <NEmpty :description="$t('page.home.noPermission')" />
+    </NCard>
+    <NGrid v-else :x-gap="16" :y-gap="16" responsive="screen" item-responsive>
       <NGi v-for="item in shortcuts" :key="item.key" span="24 s:12 m:8">
         <NCard :bordered="false" class="card-wrapper cursor-pointer" @click="$router.push({ name: item.key })">
           <div class="flex-y-center gap-12px">

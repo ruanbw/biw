@@ -2,6 +2,7 @@ import type { AxiosResponse } from 'axios';
 import { createFlatRequest } from '@sa/axios';
 import { getServiceBaseURL } from '@/utils/service';
 import { useAuthStore } from '@/store/modules/auth';
+import { $t } from '@/locales';
 import { getTokenHeader, showErrorMsg } from './shared';
 import type { RequestInstanceState } from './type';
 
@@ -36,6 +37,19 @@ async function handleUnauthorized(): Promise<boolean> {
   await useAuthStore().resetStore();
 
   return true;
+}
+
+/**
+ * The localized text for a backend `errorCode`, or `null` when this build has no message for it.
+ *
+ * vue-i18n answers the key itself when the message is missing, so comparing against the key is
+ * the only way to tell "translated" from "unknown code" (a backend newer than the bundle).
+ */
+function localizeErrorCode(errorCode: string): string | null {
+  const key = `error.${errorCode}` as App.I18n.I18nKey;
+  const localized = $t(key);
+
+  return localized === key ? null : localized;
 }
 
 /**
@@ -87,9 +101,14 @@ export const request = createFlatRequest(
         return;
       }
 
-      // Real 4xx/5xx answers carry the backend's own `Result`, whose `message` is written for
-      // the user; `error.message` would only repeat the HTTP status text.
-      const message = error.response?.data?.message || error.message;
+      /**
+       * Real 4xx/5xx answers carry the backend's own `Result`: `errorCode` is the stable
+       * identifier, `message` its English default. Prefer the localized text for the code,
+       * then the backend message, then the axios text (which only repeats the HTTP status).
+       */
+      const backend = error.response?.data;
+      const localized = backend?.errorCode ? localizeErrorCode(backend.errorCode) : null;
+      const message = localized || backend?.message || error.message;
 
       showErrorMsg(request.state, message);
     }

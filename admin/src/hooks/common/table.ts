@@ -175,7 +175,8 @@ export function useNaivePaginatedTable<ResponseData, ApiData>(
 export function useTableOperate<TableData>(
   data: Ref<TableData[]>,
   idKey: keyof TableData,
-  getData: () => Promise<void>
+  getData: () => Promise<void>,
+  pagination?: PaginationProps
 ) {
   const { bool: drawerVisible, setTrue: openDrawer, setFalse: closeDrawer } = useBoolean();
 
@@ -204,14 +205,35 @@ export function useTableOperate<TableData>(
   async function onBatchDeleted() {
     window.$message?.success($t('common.deleteSuccess'));
 
+    const deletedCount = checkedRowKeys.value.length;
+
     checkedRowKeys.value = [];
 
-    await getData();
+    await reloadAfterDelete(deletedCount);
   }
 
   /** the hook after the delete operation is completed */
   async function onDeleted() {
     window.$message?.success($t('common.deleteSuccess'));
+
+    await reloadAfterDelete(1);
+  }
+
+  /**
+   * Reload the list, stepping back a page when the delete emptied the current one.
+   *
+   * Deleting every row of page 3 would otherwise refetch page 3, which has nothing left to
+   * show: the table looks empty right after a successful delete.
+   */
+  async function reloadAfterDelete(deletedCount: number) {
+    const isPageEmptied = data.value.length <= deletedCount && (pagination?.page ?? 1) > 1;
+
+    if (pagination && isPageEmptied) {
+      // Changing the page fires the table's own watcher, which refetches.
+      pagination.page = (pagination.page ?? 1) - 1;
+
+      return;
+    }
 
     await getData();
   }

@@ -38,10 +38,11 @@ const canWrite = computed(() => hasAuth('role:write'));
  */
 const query = reactive({ page: 1, size: 10, keyword: '' });
 
-const statusOptions: SelectOption[] = [
+/** Inside `computed` so the labels follow the active locale; a plain array would freeze them. */
+const statusOptions = computed<SelectOption[]>(() => [
   { label: $t('page.systemRole.enabled'), value: 'ENABLED' },
   { label: $t('page.systemRole.disabled'), value: 'DISABLED' }
-];
+]);
 
 const roleColumns = computed<NaiveUI.TableColumn<Role>[]>(() => [
   { key: 'code', title: $t('page.systemRole.code'), width: 160 },
@@ -117,7 +118,7 @@ const { columns, columnChecks, data, loading, pagination, getData, mobilePaginat
 });
 
 const { drawerVisible, closeDrawer, operateType, handleAdd, editingData, handleEdit, onDeleted } =
-  useTableOperate(data as Ref<Role[]>, 'id', getData);
+  useTableOperate(data as Ref<Role[]>, 'id', getData, pagination);
 
 function search() {
   // A changed page triggers the hook's watch, which refreshes for us.
@@ -269,29 +270,53 @@ const permissionOptions = computed<SelectOption[]>(() =>
 );
 
 /**
+ * The sequence number of the newest `openPermissions` call.
+ *
+ * Two clicks in quick succession leave two requests in flight; without a marker the slower
+ * answer of the first row would overwrite the dialog with the wrong role's permission set.
+ */
+let permissionRequestSeq = 0;
+
+/**
  * Load the role's current permissions first and only then open the dialog.
  *
  * Opening it up front would leave an empty selection on screen when the request fails, and
  * "confirm" would submit `permissionCodes: []` — which the API treats as "revoke everything".
  */
 async function openPermissions(id: number) {
-  permissionTargetId.value = id;
+  const seq = ++permissionRequestSeq;
+
   permissionCodes.value = [];
   // Reset before the request so a failure cannot inherit the previous role's state.
   permissionTargetBuiltIn.value = false;
   permissionLoading.value = true;
 
-  const [{ data: detail, error }, { data: catalog }] = await Promise.all([
+  const [
+    { data: detail, error },
+    { data: catalog, error: catalogError }
+  ] = await Promise.all([
     fetchGetRole(id),
     allPermissions.value.length
       ? Promise.resolve({ data: allPermissions.value, error: null })
       : fetchGetPermissionList()
   ]);
 
+  // A newer click owns the dialog now; this answer is stale and must not touch any state.
+  if (seq !== permissionRequestSeq) return;
+
   permissionLoading.value = false;
 
   if (error || !detail) return;
 
+  if (catalogError && !allPermissions.value.length) {
+    // The picker would open with no options at all, which looks like "this role has no
+    // permissions" — the one state that invites wiping the role. Say it failed instead.
+    window.$message?.error($t('page.systemRole.permissionCatalogFailed'));
+    return;
+  }
+
+  // Only claim the target once the answer proved to belong to it.
+  permissionTargetId.value = id;
   permissionTargetBuiltIn.value = detail.role.builtIn;
   // ADMIN answers the wildcard, which is not a selectable option; showing it would let the
   // form submit a code the catalog does not contain.

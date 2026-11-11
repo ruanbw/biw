@@ -23,16 +23,35 @@ const model: FormModel = reactive({
 
 const rules = computed<Record<keyof FormModel, App.Global.FormRule[]>>(() => {
   // inside computed to make locale reactive, if not apply i18n, you can define it without computed
-  const { formRules } = useFormRules();
+  const { createRequiredRule } = useFormRules();
 
+  /**
+   * Login only checks that both fields are filled in.
+   *
+   * The account creation rules (username charset, password length) belong to the user form: an
+   * existing password that predates them would be refused here, locking the account out of a
+   * form it cannot fix. The backend is the one who decides whether the pair is valid.
+   */
   return {
-    userName: formRules.userName,
-    password: formRules.pwd
+    userName: [createRequiredRule($t('form.userName.required'))],
+    password: [createRequiredRule($t('form.pwd.required'))]
   };
 });
 
 async function handleSubmit() {
-  await validate();
+  // Enter on the form and a click on the button both land here; a second submission while the
+  // first is in flight would fire a parallel login request.
+  if (authStore.loginLoading) {
+    return;
+  }
+
+  try {
+    await validate();
+  } catch {
+    // naive-ui rejects with the failed rules; that is not an error to propagate.
+    return;
+  }
+
   await authStore.login(model.userName, model.password);
 }
 </script>
