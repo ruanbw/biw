@@ -39,6 +39,8 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - biw-net
 
   redis:
     image: redis:8-alpine
@@ -59,6 +61,21 @@ services:
       retries: 5
     restart: unless-stopped
 
+    # No capabilities: redis needs none, and dropping them bounds what a compromised image or a
+    # future `command` override can do.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - biw-net
+
 volumes:
   biw-pgdata:
   biw-redisdata:
+
+# Both services live on their own network. Anything else started on the default bridge cannot
+# reach 5432/6379 without explicitly joining.
+networks:
+  biw-net:
+    name: biw-net

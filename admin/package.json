@@ -37,6 +37,7 @@
     "fmt": "vp fmt",
     "gen-route": "pnpm sa gen-route",
     "lint": "vp lint --fix && eslint --fix .",
+    "lint:ci": "vp lint && eslint .",
     "prepare": "vp config --no-agent --no-hooks",
     "preview": "vp preview",
     "release": "pnpm sa release",

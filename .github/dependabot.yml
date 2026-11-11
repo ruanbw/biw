@@ -18,3 +18,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+
+  # The images in docker-compose.yml are the only dependencies that can change without a commit
+  # in this repository; without this entry a moved tag is invisible.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
