@@ -2,15 +2,10 @@ package com.biw.common.audit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -25,6 +20,12 @@ import java.util.stream.Collectors;
  * A failing sink never fails the request it describes: the business transaction has already
  * committed, and losing the request as well as the record would be the worse outcome. The
  * warning it logs is the signal to fix the sink.
+ * <p>
+ * This class only ever inserts. The application role is granted {@code SELECT, INSERT} on
+ * {@code sys_audit_log} and nothing else ({@code sql/02-app-role.sh}), so a compromised
+ * application cannot rewrite or delete the evidence it produced. Retention is therefore an
+ * operator job, not an application one: run {@code sql/03-audit-retention.sql} nightly as the
+ * database owner.
  */
 @Component
 @ConditionalOnProperty(prefix = "biw.audit.jdbc", name = "enabled", havingValue = "true")
@@ -39,14 +40,9 @@ public class JdbcAuditRecorder implements AuditRecorder {
             """;
 
     private final JdbcTemplate jdbc;
-    private final Clock clock;
-    private final Duration retention;
 
-    public JdbcAuditRecorder(JdbcTemplate jdbc, Clock clock,
-                             @Value("${biw.audit.jdbc.retention:365d}") Duration retention) {
+    public JdbcAuditRecorder(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.clock = clock;
-        this.retention = retention;
     }
 
     @Override
@@ -55,7 +51,9 @@ public class JdbcAuditRecorder implements AuditRecorder {
             jdbc.update(INSERT,
                     event.action(),
                     event.outcome().name(),
-                    event.actorId(),
+                    // Read from the session, so it is an id or absent — never a blank string that
+                    // would later look like a real (empty) actor.
+                    blankToNull(event.actorId()),
                     blankToNull(event.targetType()),
                     blankToNull(event.targetId()),
                     format(event.detail()),
@@ -64,23 +62,6 @@ public class JdbcAuditRecorder implements AuditRecorder {
         } catch (RuntimeException ex) {
             log.warn("audit record {}.{} could not be stored: {}", event.action(),
                     event.outcome().name().toLowerCase(), ex.getMessage());
-        }
-    }
-
-    /**
-     * Keeps the table bounded. A record is evidence for as long as the retention period says and
-     * not forever — an unbounded table is its own outage.
-     */
-    @Scheduled(cron = "${biw.audit.jdbc.retention-cron:0 30 3 * * *}")
-    public void purgeExpired() {
-        try {
-            int deleted = jdbc.update("DELETE FROM sys_audit_log WHERE occurred_at < ?",
-                    OffsetDateTime.now(clock).minus(retention));
-            if (deleted > 0) {
-                log.info("purged {} audit record(s) older than {}", deleted, retention);
-            }
-        } catch (RuntimeException ex) {
-            log.warn("audit retention sweep failed: {}", ex.getMessage());
         }
     }
 

@@ -159,9 +159,17 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         }
         String description = request.description() == null ? null : request.description().trim();
 
-        AuditTrail.change("name", role.getName(), request.name());
-        AuditTrail.change("description", role.getDescription(), request.description());
-        AuditTrail.change("status", role.getStatus(), request.status());
+        // A null field means "not sent", not "set to null"; recording it would turn every partial
+        // update into an audit record claiming the other columns were cleared.
+        if (request.name() != null) {
+            AuditTrail.change("name", role.getName(), request.name());
+        }
+        if (request.description() != null) {
+            AuditTrail.change("description", role.getDescription(), request.description());
+        }
+        if (request.status() != null) {
+            AuditTrail.change("status", role.getStatus(), request.status());
+        }
 
         // Write only the fields that were sent: writing the whole row back would undo a concurrent
         // permission change or delete, because those happened after this row was read.

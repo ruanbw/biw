@@ -14,10 +14,12 @@
     <property name="MAX_HISTORY" value="${LOG_MAX_HISTORY:-30}"/>
     <property name="TOTAL_CAP" value="${LOG_TOTAL_CAP:-5GB}"/>
 
+    <!-- `requestId` is the MDC key RequestIdFilter writes; a mismatched key here silently drops
+         the id from every line that is not an audit line. -->
     <property name="PLAIN_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} %X{traceId:-} - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} %X{requestId:-} - %msg%n"/>
     <property name="COLOR_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{40}) %X{traceId:-} - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{40}) %X{requestId:-} - %msg%n"/>
 
     <!-- ============================ appenders ============================ -->
 

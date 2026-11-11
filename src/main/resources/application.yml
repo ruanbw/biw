@@ -36,10 +36,11 @@ biw:
     jdbc:
       # Rows in sys_audit_log in addition to the log line. Off by default because the table only
       # exists once sql/init.sql has run; application-prod.yml turns it on.
+      #
+      # The application may only INSERT (and SELECT) here — sql/02-app-role.sh revokes UPDATE and
+      # DELETE — so the retention sweep is an operator job: run sql/03-audit-retention.sql nightly
+      # as the database owner. See docs/EXTENDING.md.
       enabled: ${BIW_AUDIT_JDBC_ENABLED:false}
-      # How long a record is kept before the nightly sweep deletes it.
-      retention: ${BIW_AUDIT_RETENTION:365d}
-      retention-cron: ${BIW_AUDIT_RETENTION_CRON:0 30 3 * * *}
   web:
     cors:
       # Empty means no CORS headers are sent; the Vite dev proxy makes them unnecessary locally.
@@ -117,8 +118,9 @@ sa-token:
   token-name: satoken
   # 8 hours absolute: long enough for an admin shift, short enough that a stolen token dies.
   timeout: ${SA_TOKEN_TIMEOUT:28800}
-  # 30 minutes of inactivity; an idle session is logged out
-  active-timeout: 1800
+  # 30 minutes of inactivity; an idle session is logged out. Overridable like every other knob:
+  # a kiosk and an admin console do not want the same idle window.
+  active-timeout: ${SA_TOKEN_ACTIVE_TIMEOUT:1800}
   is-concurrent: true
   is-share: false
   # At most three live sessions per account; a fourth evicts the oldest. Without a ceiling a

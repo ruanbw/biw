@@ -50,7 +50,12 @@ CREATE TABLE IF NOT EXISTS sys_user (
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     CONSTRAINT pk_sys_user PRIMARY KEY (id),
-    CONSTRAINT ck_sys_user_username CHECK (username = lower(username)),
+    -- Stored lowercase, and shaped like the rule the API enforces (3-32 characters, starting with
+    -- a letter or digit). The API validates first; this is the last line of defence for rows that
+    -- arrive some other way.
+    CONSTRAINT ck_sys_user_username CHECK (
+        username = lower(username)
+        AND username ~ '^[a-z0-9][a-z0-9_.-]{2,31}$'),
     CONSTRAINT ck_sys_user_deleted CHECK (deleted IN (0, 1))
 );
 

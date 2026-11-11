@@ -20,8 +20,11 @@ public class CorsConfig implements WebMvcConfigurer {
     private final String[] allowedOrigins;
 
     public CorsConfig(@Value("${biw.web.cors.allowed-origins:}") String allowedOrigins) {
+        // Split on an optional space after each comma: `https://a.com, https://b.com` is the
+        // shape people actually write, and an untrimmed origin never matches — silently, because
+        // a non-matching origin just gets no CORS header.
         this.allowedOrigins = StringUtils.hasText(allowedOrigins)
-                ? allowedOrigins.split(",")
+                ? allowedOrigins.split("\\s*,\\s*")
                 : new String[0];
     }
 

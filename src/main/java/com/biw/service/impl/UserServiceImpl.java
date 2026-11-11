@@ -266,9 +266,17 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         UserGuards.checkUpdate(user.getId(), currentUser.id(), wasActiveAdmin,
                 staysActiveAdmin, roleChange, disabling, this::countActiveAdmins);
 
-        AuditTrail.change("nickname", user.getNickname(), request.nickname());
-        AuditTrail.change("status", user.getStatus(), request.status());
-        AuditTrail.change("roles", assignedRoles, request.roleCodes());
+        // Only a field the request actually carried can have changed. Recording a null request
+        // value would claim the column was cleared, which is the opposite of "not sent".
+        if (request.nickname() != null) {
+            AuditTrail.change("nickname", user.getNickname(), request.nickname());
+        }
+        if (request.status() != null) {
+            AuditTrail.change("status", user.getStatus(), request.status());
+        }
+        if (request.roleCodes() != null) {
+            AuditTrail.change("roles", assignedRoles, request.roleCodes());
+        }
 
         userConverter.applyUpdate(request, user, OffsetDateTime.now(clock));
         // Write only the fields that were sent: writing the whole row back would undo a concurrent

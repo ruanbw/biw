@@ -8,7 +8,7 @@ import com.biw.common.audit.AuditEvent;
 import com.biw.common.audit.AuditRecorder;
 import com.biw.common.error.BizCode;
 import com.biw.common.security.CurrentUser;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.exc.InvalidFormatException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;

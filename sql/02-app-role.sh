@@ -18,11 +18,15 @@ database="${POSTGRES_DB:-biw}"
 
 echo "02-app-role: granting least privilege to role ${app_user}"
 
+# The password is read from the environment inside psql (\getenv) instead of being passed with
+# `-v`: a `-v` value is visible in the process list (`ps`, /proc/<pid>/cmdline) for the duration of
+# the script, which is exactly long enough for another container to read it.
 psql -v ON_ERROR_STOP=1 \
      -v app_user="${app_user}" \
-     -v app_password="${app_password}" \
      -v database="${database}" \
      --username "${POSTGRES_USER}" --dbname "${database}" <<'SQL'
+
+\getenv app_password APP_DB_PASSWORD
 
 -- CREATE ROLE has no IF NOT EXISTS, so build the statement conditionally and run it with \gexec:
 -- an empty result set is a no-op, which keeps this re-runnable.
@@ -34,6 +38,9 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user')
 SELECT format('ALTER ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE', :'app_user', :'app_password')
 \gexec
 
+-- PUBLIC keeps CONNECT/TEMP on a fresh database and would let any role that can log in hold a
+-- session here. Grant the one role that needs it, explicitly.
+REVOKE ALL ON DATABASE :"database" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"database" TO :"app_user";
 GRANT USAGE ON SCHEMA public TO :"app_user";
 
@@ -42,6 +49,13 @@ GRANT USAGE ON SCHEMA public TO :"app_user";
 -- cross-schema access, and the role does not get either.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"app_user";
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"app_user";
+
+-- One exception, and it is the point of the table: sys_audit_log is evidence. The application
+-- writes rows and may read them back; it may not rewrite or delete what it wrote, because a
+-- compromised application (or a SQL injection through it) is exactly the actor the record is
+-- meant to survive. Retention is therefore an operator job — sql/03-audit-retention.sql, run as
+-- the owner — not something this role can do.
+REVOKE UPDATE, DELETE ON sys_audit_log FROM :"app_user";
 
 -- Same grants for tables a later migration creates as the owner.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public

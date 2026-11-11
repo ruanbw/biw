@@ -27,14 +27,24 @@ public class LoggingAuditRecorder implements AuditRecorder {
 
     @Override
     public void record(AuditEvent event) {
-        log.info("event={}.{} actor={} target={}:{} requestId={} detail={}",
-                event.action(),
-                event.outcome().name().toLowerCase(),
+        log.info("event={} actor={} target={}:{} requestId={} detail={}",
+                eventName(event),
                 orDash(event.actorId()),
                 orDash(event.targetType()),
                 orDash(event.targetId()),
                 orDash(event.requestId() == null ? MDC.get("requestId") : event.requestId()),
                 format(event.detail()));
+    }
+
+    /**
+     * {@code domain.action.outcome}, without repeating an outcome the action already ends with.
+     * Every {@code BizCode.auditEvent} is spelled {@code domain.action.outcome} already, so a
+     * naive {@code action + "." + outcome} produced {@code auth.permission.denied.denied}.
+     */
+    private static String eventName(AuditEvent event) {
+        String outcome = event.outcome().name().toLowerCase();
+        String suffix = "." + outcome;
+        return event.action().endsWith(suffix) ? event.action() : event.action() + suffix;
     }
 
     private static String orDash(String value) {

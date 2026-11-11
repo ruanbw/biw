@@ -1,6 +1,7 @@
 package com.biw.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import cn.dev33.satoken.annotation.SaMode;
 import com.biw.common.api.Result;
 import com.biw.config.OpenApiConfig;
 import com.biw.entity.rbac.PermissionCodes;
@@ -31,12 +32,12 @@ public class PermissionController {
 
     @Operation(summary = "查询权限目录",
             description = "按权限码升序返回全部权限。权限码由 PermissionCodes 定义、由 sql/init.sql 写入，"
-                    + "本项目不提供权限的写接口。")
+                    + "本项目不提供权限的写接口。role:write 也可读取：分配权限的界面需要这份目录才能渲染选项。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "权限目录"),
-            @ApiResponse(responseCode = "403", description = "缺少 permission:read 权限")
+            @ApiResponse(responseCode = "403", description = "缺少 permission:read 或 role:write 权限")
     })
-    @SaCheckPermission(PermissionCodes.PERMISSION_READ)
+    @SaCheckPermission(value = {PermissionCodes.PERMISSION_READ, PermissionCodes.ROLE_WRITE}, mode = SaMode.OR)
     @GetMapping
     public Result<List<SysPermission>> list() {
         return Result.ok(permissionService.listAll());

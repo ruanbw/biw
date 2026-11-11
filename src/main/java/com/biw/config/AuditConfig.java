@@ -7,7 +7,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Chooses where an audit record goes.
@@ -18,7 +17,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * Both write the same {@link com.biw.common.audit.AuditEvent}, so no call site changes.
  */
 @Configuration
-@EnableScheduling
 public class AuditConfig {
 
     @Bean
