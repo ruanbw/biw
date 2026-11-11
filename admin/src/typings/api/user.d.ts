@@ -17,6 +17,12 @@ declare namespace Api {
       status: Status;
       createdAt: string;
       updatedAt: string;
+      /**
+       * Whether the signed-in caller may edit, reset or delete this account. Computed per request:
+       * a `user:write` holder still sees `false` on an administrator or on an account that holds
+       * permissions it lacks. Absent on endpoints that do not compute it.
+       */
+      manageable?: boolean;
     }
 
     /** `Result.data` of every paginated endpoint. */

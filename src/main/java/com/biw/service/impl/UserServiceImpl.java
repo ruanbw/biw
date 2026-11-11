@@ -31,6 +31,7 @@ import com.biw.mapper.SysRoleMapper;
 import com.biw.mapper.SysRolePermissionMapper;
 import com.biw.mapper.SysUserMapper;
 import com.biw.mapper.SysUserRoleMapper;
+import com.biw.mapper.projection.UserPermissionCode;
 import com.biw.mapper.projection.UserRoleCode;
 import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
@@ -162,13 +163,30 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                         .orderByDesc(SysUser::getId));
         List<SysUser> records = result.getRecords();
         if (!records.isEmpty()) {
+            List<Long> ids = records.stream().map(SysUser::getId).toList();
             Map<Long, List<String>> rolesByUser = userRoleMapper
-                    .selectRoleCodesByUserIds(records.stream().map(SysUser::getId).toList())
+                    .selectRoleCodesByUserIds(ids)
                     .stream()
                     .collect(Collectors.groupingBy(UserRoleCode::getUserId,
                             Collectors.mapping(UserRoleCode::getCode, Collectors.toList())));
-            records.forEach(user -> user.setRoleCodes(
-                    rolesByUser.getOrDefault(user.getId(), List.of())));
+            Map<Long, List<String>> permissionsByUser = userRoleMapper
+                    .selectPermissionCodesByUserIds(ids)
+                    .stream()
+                    .collect(Collectors.groupingBy(UserPermissionCode::getUserId,
+                            Collectors.mapping(UserPermissionCode::getCode, Collectors.toList())));
+
+            List<String> callerPermissions = currentUser.permissionCodes();
+            boolean callerIsAdmin = callerPermissions.contains(PermissionCodes.ALL_WILDCARD);
+
+            // Row-level, not session-level: `user:write` says the caller may use the module, not
+            // that it may edit this particular account.
+            records.forEach(user -> {
+                List<String> roleCodes = rolesByUser.getOrDefault(user.getId(), List.of());
+                user.setRoleCodes(roleCodes);
+                user.setManageable(PrivilegeGuards.canManageUser(callerIsAdmin,
+                        roleCodes.contains(RoleCodes.ADMIN), callerPermissions,
+                        permissionsByUser.getOrDefault(user.getId(), List.of())));
+            });
         }
         return new PageResult<>(
                 records,

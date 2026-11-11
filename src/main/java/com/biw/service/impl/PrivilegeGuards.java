@@ -86,6 +86,46 @@ final class PrivilegeGuards {
         }
     }
 
+    /**
+     * Whether a list row may be acted on by this caller, computed from the same rule the write
+     * path enforces. The projection exists so the UI can hide a button instead of offering one
+     * that is guaranteed to answer 403 — the check itself stays where it was.
+     */
+    static boolean canManageRole(boolean callerIsAdmin, boolean builtIn,
+                                 Collection<String> callerPermissions, Collection<String> rolePermissions) {
+        if (callerIsAdmin) {
+            return true;
+        }
+        return !builtIn && !exceeds(callerPermissions, rolePermissions);
+    }
+
+    /** Built-in roles never have their permission set edited, by anyone; the other rules match. */
+    static boolean canEditRolePermissions(boolean callerIsAdmin, boolean builtIn,
+                                          Collection<String> callerPermissions, Collection<String> rolePermissions) {
+        return !builtIn && (callerIsAdmin || !exceeds(callerPermissions, rolePermissions));
+    }
+
+    /**
+     * Mirror of {@link #checkCanModifyAdmin} plus {@link #checkCanModifyTarget}: an
+     * administrator may touch any account, a delegated manager only one that is neither an
+     * administrator nor holding a permission it lacks.
+     */
+    static boolean canManageUser(boolean callerIsAdmin, boolean targetHasAdminRole,
+                                 Collection<String> callerPermissions, Collection<String> targetPermissions) {
+        if (callerIsAdmin) {
+            return true;
+        }
+        return !targetHasAdminRole && !exceeds(callerPermissions, targetPermissions);
+    }
+
+    /** True when the target holds a code the caller does not. */
+    static boolean exceeds(Collection<String> callerPermissions, Collection<String> targetPermissions) {
+        if (targetPermissions == null || targetPermissions.isEmpty()) {
+            return false;
+        }
+        return !missing(callerPermissions, targetPermissions).isEmpty();
+    }
+
     private static String missing(Collection<String> allowed, Collection<String> requested) {
         Set<String> held = new HashSet<>(allowed);
         return requested.stream()

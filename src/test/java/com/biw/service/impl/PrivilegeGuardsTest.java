@@ -119,6 +119,38 @@ class PrivilegeGuardsTest {
                 .doesNotThrowAnyException();
     }
 
+    /**
+     * The list endpoints show a row's buttons from these flags. If they drift from the rules the
+     * write path enforces, the UI either hides an action the API would allow or offers one that
+     * is guaranteed to answer 403.
+     */
+    @Test
+    void rowFlagsMirrorTheWritePathRules() {
+        List<String> admin = List.of(PermissionCodes.ALL_WILDCARD);
+
+        // A built-in role may be renamed by an administrator and never has its permissions edited.
+        assertThat(PrivilegeGuards.canManageRole(true, true, admin, List.of())).isTrue();
+        assertThat(PrivilegeGuards.canEditRolePermissions(true, true, admin, List.of())).isFalse();
+        assertThat(PrivilegeGuards.canManageRole(false, true, List.of(PermissionCodes.ROLE_WRITE), List.of()))
+                .isFalse();
+
+        // A delegated manager may only touch a role it already covers.
+        List<String> delegated = List.of(PermissionCodes.ROLE_READ, PermissionCodes.ROLE_WRITE);
+        assertThat(PrivilegeGuards.canManageRole(false, false, delegated, List.of(PermissionCodes.ROLE_WRITE)))
+                .isTrue();
+        assertThat(PrivilegeGuards.canManageRole(false, false, delegated, List.of(PermissionCodes.ROLE_WRITE,
+                PermissionCodes.USER_READ))).isFalse();
+
+        // Same rule for accounts, plus: nobody but an administrator touches an administrator.
+        List<String> userManager = List.of(PermissionCodes.USER_READ, PermissionCodes.USER_WRITE);
+        assertThat(PrivilegeGuards.canManageUser(false, false, userManager, List.of(PermissionCodes.USER_READ)))
+                .isTrue();
+        assertThat(PrivilegeGuards.canManageUser(false, false, userManager, List.of(PermissionCodes.ROLE_WRITE)))
+                .isFalse();
+        assertThat(PrivilegeGuards.canManageUser(false, true, userManager, List.of())).isFalse();
+        assertThat(PrivilegeGuards.canManageUser(true, true, admin, List.of())).isTrue();
+    }
+
     @Test
     void adminMayGrantAnything() {
         assertThatCode(() -> PrivilegeGuards.checkCanGrantPermissions(

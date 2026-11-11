@@ -1,6 +1,7 @@
 package com.biw.entity.rbac;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -41,6 +42,18 @@ public class SysRole {
 
     @Schema(description = "更新时间", example = "2026-01-01T12:00:00+08:00")
     private OffsetDateTime updatedAt;
+
+    /**
+     * Whether the caller of the list may edit or delete this row. Computed per request, never
+     * stored: it depends on who is asking, and the write path enforces the same rule.
+     */
+    @Schema(description = "当前调用者是否可以编辑或删除该角色", example = "true")
+    @TableField(exist = false)
+    private Boolean manageable;
+
+    @Schema(description = "当前调用者是否可以修改该角色的权限；内置角色永远为 false", example = "true")
+    @TableField(exist = false)
+    private Boolean permissionsEditable;
 
     public Long getId() {
         return id;
@@ -112,5 +125,21 @@ public class SysRole {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Boolean getManageable() {
+        return manageable;
+    }
+
+    public void setManageable(Boolean manageable) {
+        this.manageable = manageable;
+    }
+
+    public Boolean getPermissionsEditable() {
+        return permissionsEditable;
+    }
+
+    public void setPermissionsEditable(Boolean permissionsEditable) {
+        this.permissionsEditable = permissionsEditable;
     }
 }

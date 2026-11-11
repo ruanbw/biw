@@ -1,5 +1,6 @@
 package com.biw.mapper;
 
+import com.biw.mapper.projection.RolePermissionCode;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -57,6 +58,21 @@ public interface SysRolePermissionMapper {
             </script>
             """)
     List<String> selectPermissionCodesByRoleIds(@Param("roleIds") Collection<Long> roleIds);
+
+    /**
+     * The same union, keyed by role, for a page of roles: one query instead of one per row.
+     */
+    @Select("""
+            <script>
+            SELECT rp.role_id, p.code
+            FROM sys_role_permission rp
+            JOIN sys_permission p ON p.id = rp.permission_id
+            WHERE rp.role_id IN
+            <foreach collection="roleIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            ORDER BY rp.role_id, p.code
+            </script>
+            """)
+    List<RolePermissionCode> selectCodesByRoleIds(@Param("roleIds") Collection<Long> roleIds);
 
     @Insert("""
             INSERT INTO sys_role_permission (role_id, permission_id)

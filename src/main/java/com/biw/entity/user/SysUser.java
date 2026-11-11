@@ -46,6 +46,14 @@ public class SysUser {
     @Schema(description = "更新时间", example = "2026-01-01T12:00:00+08:00")
     private OffsetDateTime updatedAt;
 
+    /**
+     * Whether the caller of the list may edit, reset or delete this account. Computed per
+     * request: it depends on who is asking and on the target's permissions.
+     */
+    @Schema(description = "当前调用者是否可以编辑、重置密码或删除该用户", example = "true")
+    @TableField(exist = false)
+    private Boolean manageable;
+
     public Long getId() {
         return id;
     }
@@ -116,5 +124,13 @@ public class SysUser {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Boolean getManageable() {
+        return manageable;
+    }
+
+    public void setManageable(Boolean manageable) {
+        this.manageable = manageable;
     }
 }

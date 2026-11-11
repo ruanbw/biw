@@ -80,18 +80,20 @@ const roleColumns = computed<NaiveUI.TableColumn<Role>[]>(() => [
     fixed: 'right',
     render: row =>
       h('div', { class: 'flex-center gap-8px' }, [
-        canWrite.value
+        // `manageable` is computed by the backend with the same rule its write path enforces:
+        // role:write alone is not enough when the row carries permissions the caller lacks.
+        canWrite.value && row.manageable !== false
           ? h(NButton, { size: 'tiny', quaternary: true, type: 'primary', onClick: () => openEdit(row.id) }, () =>
               $t('common.edit')
             )
           : null,
-        canWrite.value
+        canWrite.value && row.permissionsEditable !== false
           ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => openPermissions(row.id) }, () =>
               $t('page.systemRole.permissionTitle')
             )
           : null,
         // Built-in roles can never be deleted, so the button would only earn a 403.
-        canWrite.value && !row.builtIn
+        canWrite.value && row.manageable !== false && !row.builtIn
           ? h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => handleDelete(row.id) }, () =>
               $t('common.delete')
             )

@@ -1,5 +1,6 @@
 package com.biw.mapper;
 
+import com.biw.mapper.projection.UserPermissionCode;
 import com.biw.mapper.projection.UserRoleCode;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -57,6 +58,24 @@ public interface SysUserRoleMapper {
             </script>
             """)
     List<UserRoleCode> selectRoleCodesByUserIds(@Param("userIds") Collection<Long> userIds);
+
+    /**
+     * Permission codes carried by the roles a page of users holds, keyed by user. Roles are read
+     * as assigned, not as currently granting, because that is what the delegation ceiling
+     * compares — a disabled role can be enabled later.
+     */
+    @Select("""
+            <script>
+            SELECT ur.user_id, p.code
+            FROM sys_user_role ur
+            JOIN sys_role_permission rp ON rp.role_id = ur.role_id
+            JOIN sys_permission p ON p.id = rp.permission_id
+            WHERE ur.user_id IN
+            <foreach collection="userIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            ORDER BY ur.user_id, p.code
+            </script>
+            """)
+    List<UserPermissionCode> selectPermissionCodesByUserIds(@Param("userIds") Collection<Long> userIds);
 
     /**
      * Users that still exist and hold the role; disabled accounts count too, so a role cannot

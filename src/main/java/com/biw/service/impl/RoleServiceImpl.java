@@ -21,6 +21,7 @@ import com.biw.entity.rbac.dto.AssignPermissionsRequest;
 import com.biw.entity.rbac.dto.CreateRoleRequest;
 import com.biw.entity.rbac.dto.UpdateRoleRequest;
 import com.biw.entity.rbac.vo.RoleDetailVO;
+import com.biw.mapper.projection.RolePermissionCode;
 import com.biw.mapper.SysPermissionMapper;
 import com.biw.mapper.SysRoleMapper;
 import com.biw.mapper.SysRolePermissionMapper;
@@ -35,6 +36,7 @@ import org.springframework.util.StringUtils;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -74,8 +76,30 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                         // Tiebreaker: rows created in the same millisecond have no stable order in
                         // PostgreSQL, so LIMIT/OFFSET paging could show one twice and skip another.
                         .orderByDesc(SysRole::getId));
+        List<SysRole> records = result.getRecords();
+        if (!records.isEmpty()) {
+            List<String> callerPermissions = currentUser.permissionCodes();
+            boolean callerIsAdmin = callerPermissions.contains(PermissionCodes.ALL_WILDCARD);
+            Map<Long, List<String>> permissionsByRole = rolePermissionMapper
+                    .selectCodesByRoleIds(records.stream().map(SysRole::getId).toList())
+                    .stream()
+                    .collect(Collectors.groupingBy(RolePermissionCode::getRoleId,
+                            Collectors.mapping(RolePermissionCode::getCode, Collectors.toList())));
+
+            // The page tells the caller which rows it may act on, using the same rule the write
+            // path enforces. Without it the UI can only offer role:write, which is true for a
+            // delegated manager and still gets a 403 on a role that outranks it.
+            records.forEach(role -> {
+                List<String> rolePermissions = permissionsByRole.getOrDefault(role.getId(), List.of());
+                boolean builtIn = Boolean.TRUE.equals(role.getBuiltIn());
+                role.setManageable(PrivilegeGuards.canManageRole(
+                        callerIsAdmin, builtIn, callerPermissions, rolePermissions));
+                role.setPermissionsEditable(PrivilegeGuards.canEditRolePermissions(
+                        callerIsAdmin, builtIn, callerPermissions, rolePermissions));
+            });
+        }
         return new PageResult<>(
-                result.getRecords(),
+                records,
                 result.getTotal(),
                 result.getCurrent(),
                 result.getSize(),

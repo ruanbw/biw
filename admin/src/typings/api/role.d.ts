@@ -18,6 +18,14 @@ declare namespace Api {
       builtIn: boolean;
       createdAt: string;
       updatedAt: string;
+      /**
+       * Whether the signed-in caller may edit or delete this role. Computed per request from the
+       * delegation ceiling, so a `role:write` holder still sees `false` on a role that outranks
+       * it. Absent on endpoints that do not compute it.
+       */
+      manageable?: boolean;
+      /** Built-in roles answer `false` for everyone. */
+      permissionsEditable?: boolean;
     }
 
     /** `Result.data` of `GET /api/roles/{id}` and `PUT /api/roles/{id}/permissions`. */

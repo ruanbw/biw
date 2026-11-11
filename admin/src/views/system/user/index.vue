@@ -93,17 +93,19 @@ const userColumns = computed<NaiveUI.TableColumn<User>[]>(() => [
     fixed: 'right',
     render: row =>
       h('div', { class: 'flex-center gap-8px' }, [
-        canWrite.value
+        // `manageable` is computed by the backend: user:write opens the module, but an
+        // administrator or an account holding more permissions still answers false.
+        canWrite.value && row.manageable !== false
           ? h(NButton, { size: 'tiny', quaternary: true, type: 'primary', onClick: () => openEdit(row.id) }, () =>
               $t('common.edit')
             )
           : null,
-        canWrite.value
+        canWrite.value && row.manageable !== false
           ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => openResetPassword(row.id) }, () =>
               $t('page.systemUser.resetPasswordTitle')
             )
           : null,
-        canWrite.value
+        canWrite.value && row.manageable !== false
           ? h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => confirmDelete(row.id) }, () =>
               $t('common.delete')
             )
