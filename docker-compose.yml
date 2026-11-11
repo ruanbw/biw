@@ -37,13 +37,17 @@ services:
   redis:
     image: redis:8-alpine
     container_name: biw-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    # Sa-Token keeps every session in this instance, so it has to require a password even on
+    # localhost: any process on the machine could otherwise export every live token.
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-devpass}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-devpass}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - biw-redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping"]
       interval: 10s
       timeout: 5s
       retries: 5

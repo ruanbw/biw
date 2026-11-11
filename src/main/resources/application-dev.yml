@@ -16,6 +16,8 @@ spring:
     redis:
       host: localhost
       port: 6379
+      # Matches docker-compose.yml; an open Redis on this host is a session stealer.
+      password: ${REDIS_PASSWORD:devpass}
       database: 0
       timeout: 3s
       connect-timeout: 3s
@@ -31,7 +33,8 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 sa-token:
-  is-log: true
+  # Session logging writes token values into the application log; keep it off even here.
+  is-log: false
 
 springdoc:
   api-docs:
@@ -42,5 +45,7 @@ springdoc:
 logging:
   level:
     com.biw: debug
-    org.springframework.web: debug
+    # info, not debug: at DEBUG Spring MVC echoes every request and response body, which is
+    # exactly where a plaintext password and a live token end up in logs/biw.log.
+    org.springframework.web: info
     org.springframework.jdbc.core: debug

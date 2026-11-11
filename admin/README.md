@@ -45,4 +45,6 @@ the file, then supply its menu icon, order and `permissions` in the `routeMetaRe
 ## Accounts
 
 There is no public sign-up: an administrator creates accounts, and only an administrator can
-reset a password. See the seed SQL comment in `sql/init.sql` for creating the first one.
+reset a password. The first administrator comes from `BIW_BOOTSTRAP_ADMIN_USERNAME` /
+`BIW_BOOTSTRAP_ADMIN_PASSWORD` on the first start against an empty database — see the root
+`README.md`. Nothing is seeded in `sql/init.sql`.

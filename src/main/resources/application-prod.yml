@@ -17,7 +17,9 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      # Required, no default: the sessions live here, so an unauthenticated Redis is a
+      # session stealer. Startup fails when the variable is missing, which is the point.
+      password: ${REDIS_PASSWORD}
       database: ${REDIS_DATABASE:0}
       timeout: 3s
       lettuce:
@@ -28,11 +30,7 @@ spring:
           min-idle: ${REDIS_POOL_MIN_IDLE:4}
 
 server:
-  # Do not leak stack traces / server details to clients.
-  error:
-    include-message: never
-    include-stacktrace: never
-    include-exception: false
+  # `server.error.include-*` is set once in application.yml; only the proxy hint is prod-specific.
   forward-headers-strategy: native
 
 sa-token:

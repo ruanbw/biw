@@ -79,8 +79,8 @@ PostgreSQL 的 `ALTER TYPE ... ADD VALUE` 不能在同一个事务里被使用�
 | 1 | `git clone <tpl> acme && cd acme && rm -rf .git && git init` | `git log` 只有自己的提交 |
 | 2 | 改名：`grep -rl 'com\.biw' src admin \| xargs sed -i '' 's/com\.biw/com\.acme/g'`，再改 `pom.xml` 的 groupId/artifactId、`spring.application.name`、Redis key 前缀 `biw:`、审计 logger 名 | `grep -rn 'com\.biw\|"biw:' .` 无输出 |
 | 3 | 改 `docker-compose.yml` 的 `POSTGRES_DB` / `POSTGRES_USER` / 卷名，同步改 `sql/init.sql` 的注释 | `docker compose up -d` 后库存在 |
-| 4 | 处理种子管理员（见下节） | 按团队策略二选一 |
-| 5 | 启动一次 | 5 张表存在，`admin` 能登录 |
+| 4 | 确认第一个管理员的来源（见下节） | 空库启动时按环境变量创建 |
+| 5 | 启动一次 | 5 张表存在，用上一步的账号能登录 |
 | 6 | 前端品牌：`VITE_APP_TITLE`、`locales/langs/*.ts`、`index.html` | 登录页无 `biw` 字样 |
 | 7 | 启用 CI：`.github/workflows/ci.yml` 已就绪 | PR 上 `backend` 与 `frontend` 两个 job 绿 |
 | 8 | 加一个 demo 模块（按第 3 节） | 菜单可见、CRUD 可用、`PermissionCodesTest` 绿 |
@@ -91,14 +91,18 @@ PostgreSQL 的 `ALTER TYPE ... ADD VALUE` 不能在同一个事务里被使用�
 
 ## 5. 第一个管理员
 
-`sql/init.sql` 末尾内置了一个 `admin` 账号，让基座项目开箱即用。它适合开发环境，不适合生产。派生项目二选一：
+仓库里**不保存任何账号**。一个提交过的口令就是一个公开口令：拿到仓库（或 fork、或旧压缩包）的人，
+对每个按文档起起来的实例都有管理员权限。
 
-| 方式 | 做法 | 适用 |
-|---|---|---|
-| A. 沿用种子账号 | 保留 `sql/init.sql` 的 INSERT，首次登录后改密 | 开发、演示 |
-| B. 从环境变量创建 | 删掉 `sql/init.sql` 里的 `admin` 与 `sys_user_role` 两段；启动时设置 `BIW_BOOTSTRAP_ADMIN_USERNAME` / `BIW_BOOTSTRAP_ADMIN_PASSWORD` | 任何会保留数据的部署 |
+第一个管理员由 `BootstrapAdminRunner` 从环境变量创建，只在账号表为空时执行，创建后日志 WARN
+提醒改密，重启不会覆盖已有账号：
 
-方式 B 由 `BootstrapAdminRunner` 执行：只在账号表为空时创建，创建后日志 WARN 提醒改密，重启不会覆盖已有账号。
+```bash
+BIW_BOOTSTRAP_ADMIN_USERNAME=admin BIW_BOOTSTRAP_ADMIN_PASSWORD='<至少 8 位>' ...
+```
+
+后续管理员通过 `POST /api/users` 创建；密码只能由管理员重置（没有自助注册，也没有自助改密）。
+派生项目若要接 LDAP、邀请码或 SSO，替换这个 Runner 即可，schema 不用动。
 
 ---
 

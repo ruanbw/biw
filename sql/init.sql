@@ -156,26 +156,13 @@ INSERT INTO sys_permission (code, name, description) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- Seed: the first administrator
+-- No administrator is seeded here, on purpose
 -- ---------------------------------------------------------------------------
--- Username: admin
--- Password: the value documented in README.md
+-- A committed account is a committed credential: anyone with the repository (or a fork, or an
+-- old tarball) can log in to every instance started from it. The first administrator is created
+-- from the environment by BootstrapAdminRunner, and only while the account table is empty:
 --
--- This exists so a fresh base project is usable immediately. It is a base project's default,
--- not a production credential:
---   * change the password after the first login, or
---   * delete this block and set BIW_BOOTSTRAP_ADMIN_USERNAME / _PASSWORD instead — then
---     BootstrapAdminRunner creates the account from the environment on an empty database.
+--   BIW_BOOTSTRAP_ADMIN_USERNAME=admin BIW_BOOTSTRAP_ADMIN_PASSWORD='...' ...
 --
--- The hash is BCrypt with 12 rounds, matching PasswordEncoderConfig. To set your own:
---   htpasswd -bnBC 12 "" 'your-password' | cut -d: -f2
-INSERT INTO sys_user (username, password_hash, nickname)
-VALUES ('admin', '$2y$12$CCK1G2lRYBXNjw6gcsksxOANvhgh38Dx9urP3Af86qYEc.tSYBPUi', '管理员')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_user_role (user_id, role_id)
-SELECT u.id, r.id
-FROM sys_user u
-JOIN sys_role r ON r.code = 'ADMIN'
-WHERE u.username = 'admin' AND u.deleted = 0
-ON CONFLICT DO NOTHING;
+-- See README.md and docs/EXTENDING.md. Accounts after the first one are created through
+-- POST /api/users, and passwords can only be reset by an administrator.

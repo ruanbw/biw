@@ -10,22 +10,22 @@ Java 21 + Spring Boot 4.1.2 的 **RBAC 基座项目**：用户、角色、权限
 ## 启动
 
 ```bash
-docker compose up -d                # 建库 + 执行 sql/init.sql（表、内置角色、权限目录、admin）
-SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
+docker compose up -d                # 建库 + 执行 sql/init.sql（表、内置角色、权限目录）
 ```
 
-**表结构只有一个文件：`sql/init.sql`。** 没有迁移链——这是基座项目，没有需要保留的部署历史。
-改表就改这个文件，然后 `docker compose down -v && docker compose up -d`。
-
-默认管理员：用户名 `admin`，密码见 `sql/init.sql` 末尾注释。**首次登录后请改密。**
-
-不想在仓库里保留凭据的部署，删掉 `sql/init.sql` 里的 admin 两段，改用环境变量：
+第一个管理员从环境变量创建，仓库里不保存任何账号或口令：
 
 ```bash
 BIW_BOOTSTRAP_ADMIN_USERNAME=admin \
 BIW_BOOTSTRAP_ADMIN_PASSWORD='<至少 8 位，UTF-8 不超过 72 字节>' \
 SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
 ```
+
+`BootstrapAdminRunner` 只在账号表为空时创建，账号已存在时这两个变量被忽略，所以可以一直带着它们启动。
+**首次登录后请改密。**
+
+**表结构只有一个文件：`sql/init.sql`。** 没有迁移链——这是基座项目，没有需要保留的部署历史。
+改表就改这个文件，然后 `docker compose down -v && docker compose up -d`。
 
 `SPRING_PROFILES_ACTIVE` 没有默认值：不设置会启动失败，而不是悄悄用 dev 配置跑起来。
 `dev` / `test` / `prod` 之外还有 `local`（个人机器覆盖，`application-local.yml` 不入库）。
