@@ -1,5 +1,10 @@
 name: ci
 
+# Least privilege: the workflow only reads the repository. Without this block the token gets the
+# repository default, which is write access for a dependency lifecycle script to abuse.
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
