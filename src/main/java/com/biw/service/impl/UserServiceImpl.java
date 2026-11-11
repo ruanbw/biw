@@ -101,8 +101,10 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         checkPasswordBytes(request.password());
         String username = normalize(request.username());
         String clientAddress = ClientAddress.current();
-        // A refused attempt is audited by GlobalExceptionHandler from the code carried here.
-        loginThrottle.check(username, clientAddress);
+        // Counts the attempt before the password is checked, atomically against both buckets: a
+        // refusal is audited by GlobalExceptionHandler from the code carried here, and costs no
+        // BCrypt call.
+        loginThrottle.attempt(username, clientAddress);
 
         SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
         boolean enabled = user != null && user.getStatus() == UserStatus.ENABLED;
@@ -112,15 +114,16 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean passwordMatches = passwordEncoder.matches(request.password(),
                 enabled ? user.getPasswordHash() : dummyPasswordHash);
         if (!enabled || !passwordMatches) {
-            loginThrottle.record(username, clientAddress);
+            // attempt(...) already counted this failure; nothing else to write.
             // The audit event names the outcome; the reason (unknown / disabled / wrong password)
             // is deliberately not part of the response, so it must not be inferred from timing.
             throw new BizException(BizCode.BAD_CREDENTIALS);
         }
 
-        // Only the account bucket: a successful login proves ownership of that name, but a caller
-        // must not be able to reset its own client bucket by logging into an account it owns.
-        loginThrottle.clear(username);
+        // Clears the account bucket and refunds the client bucket: the attempt was reserved but
+        // it was not a failure. The rest of the client bucket stays, so a caller cannot reset a
+        // shared address's counter by logging into an account it controls.
+        loginThrottle.onSuccess(username, clientAddress);
         SessionIssuer.IssuedToken token = sessionIssuer.login(user.getId());
         return new LoginVO(token.tokenName(), token.tokenValue(), token.timeoutSeconds(), withRoleCodes(user));
     }
@@ -129,7 +132,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     public SysUser me() {
         Long id = currentUser.id();
         SysUser user = getById(id);
-        if (user == null) {
+        // A disabled account must not get a profile back even when its session survived (the
+        // revoke on disable can fail, and a row can be disabled directly in the database).
+        if (user == null || user.getStatus() != UserStatus.ENABLED) {
             throw new BizException(BizCode.SESSION_INVALID);
         }
         return withRoleCodes(user);
@@ -296,7 +301,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     @Override
     @Transactional
-    @Audited(action = "user.batch-delete", targetType = "user")
+    @Audited(action = "user.batch-delete", targetType = "user", targetIdParam = "ids")
     public void batchDelete(List<Long> ids) {
         batchDeleteInternal(ids);
     }

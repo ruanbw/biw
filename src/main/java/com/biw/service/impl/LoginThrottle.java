@@ -1,7 +1,7 @@
 package com.biw.service.impl;
 
-import com.biw.common.exception.BizException;
 import com.biw.common.error.BizCode;
+import com.biw.common.exception.BizException;
 import com.biw.common.web.ClientAddress;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -33,16 +33,44 @@ final class LoginThrottle {
     private static final String CLIENT_KEY_PREFIX = "biw:login:fail:client:";
 
     /**
-     * Increments both buckets and sets the window on the first failure. One script for both keys:
-     * two commands could leave a key behind when the process dies in between, and a key without a
-     * TTL would refuse that account forever.
+     * Reserves one attempt against both buckets in a single round trip.
+     * <p>
+     * Reading the two counters and incrementing them has to be one atomic step. When the check
+     * and the write are separate calls, every request of a concurrent burst sees a count below
+     * the ceiling and the limit only holds for sequential traffic — which is not what an
+     * attacker sends.
+     * <p>
+     * {@code KEYS[1]} account, {@code KEYS[2]} client; {@code ARGV[1]} account limit,
+     * {@code ARGV[2]} client limit, {@code ARGV[3]} window in seconds. Returns 1 when the
+     * attempt was reserved, 0 when either bucket is already at its ceiling.
      */
-    private static final RedisScript<Long> RECORD_FAILURE_SCRIPT = new DefaultRedisScript<>("""
+    private static final RedisScript<Long> RESERVE_SCRIPT = new DefaultRedisScript<>("""
+            local accountLimit = tonumber(ARGV[1])
+            local clientLimit = tonumber(ARGV[2])
+            local window = tonumber(ARGV[3])
+            local account = tonumber(redis.call('GET', KEYS[1]) or '0')
+            local client = tonumber(redis.call('GET', KEYS[2]) or '0')
+            if account >= accountLimit or client >= clientLimit then
+              return 0
+            end
             for i = 1, #KEYS do
               local count = redis.call('INCR', KEYS[i])
               if count == 1 or redis.call('TTL', KEYS[i]) < 0 then
-                redis.call('EXPIRE', KEYS[i], ARGV[1])
+                redis.call('EXPIRE', KEYS[i], window)
               end
+            end
+            return 1
+            """, Long.class);
+
+    /**
+     * Gives one count back to the client bucket after a successful login, because the attempt was
+     * reserved but was not a failure. Clamped at zero: a success that was never counted (an older
+     * key, a flushed Redis) must not push the counter negative and buy extra attempts.
+     */
+    private static final RedisScript<Long> REFUND_SCRIPT = new DefaultRedisScript<>("""
+            local value = tonumber(redis.call('GET', KEYS[1]) or '0')
+            if value > 0 then
+              redis.call('DECR', KEYS[1])
             end
             return 1
             """, Long.class);
@@ -56,49 +84,34 @@ final class LoginThrottle {
     }
 
     /**
-     * Refuses the attempt when either bucket is at its ceiling. Read before the password is
-     * checked, so a locked account costs no BCrypt call.
+     * Counts the attempt and refuses it when either bucket is at its ceiling.
+     * <p>
+     * Called before the password is checked, so a throttled attempt costs no BCrypt call. The
+     * attempt is counted even when it succeeds; {@link #onSuccess} gives that count back.
      */
-    void check(String username, String clientAddress) {
-        List<String> counts = redis.opsForValue()
-                .multiGet(List.of(accountKey(username), clientKey(clientAddress)));
-        if (counts == null) {
-            return;
-        }
-        if (atLeast(counts.get(0), policy.maxAccountFailures())
-                || atLeast(counts.get(1), policy.maxClientFailures())) {
+    void attempt(String username, String clientAddress) {
+        Long reserved = redis.execute(RESERVE_SCRIPT,
+                List.of(accountKey(username), clientKey(clientAddress)),
+                String.valueOf(policy.maxAccountFailures()),
+                String.valueOf(policy.maxClientFailures()),
+                String.valueOf(policy.window().toSeconds()));
+        // A null result means the script produced no value (an embedded/test template); treat it
+        // as "reserved" rather than turning a Redis quirk into a login outage.
+        if (reserved != null && reserved == 0L) {
             throw new BizException(BizCode.LOGIN_THROTTLED,
                     "Too many failed login attempts, try again in " + policy.window().toMinutes() + " minutes");
         }
     }
 
-    /** Counts one failed attempt against both buckets. */
-    void record(String username, String clientAddress) {
-        redis.execute(RECORD_FAILURE_SCRIPT,
-                List.of(accountKey(username), clientKey(clientAddress)),
-                String.valueOf(policy.window().toSeconds()));
-    }
-
     /**
-     * Forgets the account's failures: a successful login proves ownership of the name. The client
-     * bucket is deliberately left alone, otherwise a caller could reset it by logging into an
-     * account it already controls.
+     * Clears the account bucket and refunds the client bucket: a successful login proves
+     * ownership of the name, and this attempt was not a failure. The rest of the client bucket is
+     * deliberately left alone — a caller must not be able to reset it by logging into an account
+     * it already controls.
      */
-    void clear(String username) {
+    void onSuccess(String username, String clientAddress) {
         redis.delete(accountKey(username));
-    }
-
-    /** How long a refused caller has to wait; used in the client-facing message. */
-    Duration window() {
-        return policy.window();
-    }
-
-    private static int parse(String count) {
-        return count == null ? 0 : Integer.parseInt(count);
-    }
-
-    private static boolean atLeast(String count, int limit) {
-        return count != null && parse(count) >= limit;
+        redis.execute(REFUND_SCRIPT, List.of(clientKey(clientAddress)));
     }
 
     /**
