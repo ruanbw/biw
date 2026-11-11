@@ -156,9 +156,11 @@ async function initRoute(to: RouteLocationNormalized): Promise<RouteLocationRaw 
 function handleRouteSwitch(to: RouteLocationNormalized, from: RouteLocationNormalized) {
   // route with href
   if (to.meta.href) {
-    window.open(to.meta.href, '_blank');
+    // The target is an external site: `noopener` keeps it from reaching back through
+    // `window.opener`.
+    window.open(to.meta.href, '_blank', 'noopener');
 
-    return { path: from.fullPath, replace: true, query: from.query, hash: to.hash };
+    return { path: from.fullPath, replace: true, query: from.query, hash: from.hash };
   }
 }
 

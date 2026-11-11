@@ -312,6 +312,11 @@ const local: App.I18n.Schema = {
       createTitle: 'New role',
       editTitle: 'Edit role',
       codeTip: 'Starts with an uppercase letter; only A-Z, 0-9 and _ are allowed. Immutable afterwards.',
+      codeRequired: 'Please enter a role code',
+      codeInvalid: 'Must start with an uppercase letter, only A-Z, 0-9 and _ allowed, 1-32 characters',
+      nameRequired: 'Please enter a role name',
+      nameTooLong: 'Role name must be at most 64 characters',
+      descriptionTooLong: 'Description must be at most 255 characters',
       permissionTitle: 'Assign permissions',
       permissionTip: 'The submitted set replaces the current one; an empty selection revokes everything.',
       permissionEmpty: 'No permission selected',
@@ -340,7 +345,7 @@ const local: App.I18n.Schema = {
     },
     pwd: {
       required: 'Please enter password',
-      invalid: '6-18 characters, including letters, numbers, and underscores'
+      invalid: 'Password must be 8-64 characters and at most 72 bytes in UTF-8'
     },
     confirmPwd: {
       required: 'Please enter password again',

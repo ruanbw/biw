@@ -308,6 +308,11 @@ const local: App.I18n.Schema = {
       createTitle: '新增角色',
       editTitle: '编辑角色',
       codeTip: '大写字母开头，仅可包含大写字母、数字和下划线，创建后不可修改。',
+      codeRequired: '请输入角色编码',
+      codeInvalid: '须以大写字母开头，仅可包含大写字母、数字和下划线，长度为 1-32 位',
+      nameRequired: '请输入角色名称',
+      nameTooLong: '角色名称不能超过 64 个字符',
+      descriptionTooLong: '说明不能超过 255 个字符',
       permissionTitle: '分配权限',
       permissionTip: '提交的权限会整体替换角色原有权限，留空表示撤销全部权限。',
       permissionEmpty: '未选择任何权限',
@@ -336,7 +341,7 @@ const local: App.I18n.Schema = {
     },
     pwd: {
       required: '请输入密码',
-      invalid: '密码格式不正确，6-18位字符，包含字母、数字、下划线'
+      invalid: '密码需为 8-64 位字符，且 UTF-8 编码不超过 72 字节'
     },
     confirmPwd: {
       required: '请输入确认密码',

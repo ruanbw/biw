@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { fetchGetPermissionList } from '@/service/api';
 import { $t } from '@/locales';
 
@@ -24,11 +24,11 @@ async function loadPermissions() {
 
 onMounted(loadPermissions);
 
-const columns = [
+const columns = computed<NaiveUI.TableColumn<Api.Permission.Permission>[]>(() => [
   { key: 'code', title: $t('page.systemPermission.code'), width: 200 },
   { key: 'name', title: $t('page.systemPermission.name'), width: 160 },
   { key: 'description', title: $t('page.systemPermission.description') }
-];
+]);
 </script>
 
 <template>
