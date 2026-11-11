@@ -113,9 +113,13 @@
         <logger name="cn.dev33.satoken" level="WARN"/>
     </springProfile>
 
-    <!-- No profile selected. -->
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-    </root>
+    <!-- Fallback for a profile this file does not know. It has to be conditional: a `<root>`
+         element sets the level every time it appears, so an unconditional one at the end of the
+         file would silently turn dev's DEBUG back into INFO (and attach the console twice). -->
+    <springProfile name="!(dev | local | test | prod)">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
 
 </configuration>

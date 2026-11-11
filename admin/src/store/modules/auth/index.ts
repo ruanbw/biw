@@ -43,7 +43,8 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
 
     clearAuthStorage();
 
-    // A setup store has no `$reset` (pinia throws), so clear the state by hand.
+    // Not `$reset()`: the plugin would make it work, but this reset has an order that matters —
+    // remember the previous user id, clear storage, clear state, then route and drop the tabs.
     token.value = '';
     Object.assign(userInfo, {
       userId: '',
