@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Compile
+        run: mvn -B -ntp -DskipTests compile
+      - name: Test
+        run: mvn -B -ntp test
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire
+          path: target/surefire-reports/
+
+  frontend:
+    name: admin (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: admin/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+
+  # The integration layer is not wired yet: it needs a Testcontainers run (PostgreSQL 18 +
+  # Redis 7) and a Docker daemon. The job is declared so adding src/test/java/com/biw/it and
+  # `mvn verify -Pit` is a one-line change rather than a workflow rewrite.
+  #
+  # backend-it:
+  #   name: backend (integration)
+  #   needs: backend
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-java@v4
+  #       with: { java-version: '21', distribution: temurin, cache: maven }
+  #     - run: docker pull postgres:18-alpine && docker pull redis:7-alpine
+  #     - run: mvn -B -ntp verify -Pit

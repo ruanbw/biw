@@ -1,6 +1,5 @@
 package com.biw.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
@@ -8,7 +7,11 @@ import com.biw.common.api.OptionQuery;
 import com.biw.common.api.OptionVO;
 import com.biw.common.api.PageBounds;
 import com.biw.common.api.PageResult;
+import com.biw.common.audit.AuditTrail;
+import com.biw.common.audit.Audited;
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
+import com.biw.common.security.CurrentUser;
 import com.biw.entity.rbac.PermissionCodes;
 import com.biw.entity.rbac.RoleCodes;
 import com.biw.entity.rbac.RoleStatus;
@@ -25,11 +28,11 @@ import com.biw.mapper.SysUserRoleMapper;
 import com.biw.service.RbacAuthorities;
 import com.biw.service.RoleService;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
@@ -42,15 +45,21 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RbacAuthorities rbacAuthorities;
+    private final CurrentUser currentUser;
+    private final Clock clock;
 
     public RoleServiceImpl(SysPermissionMapper permissionMapper,
                            SysRolePermissionMapper rolePermissionMapper,
                            SysUserRoleMapper userRoleMapper,
-                           RbacAuthorities rbacAuthorities) {
+                           RbacAuthorities rbacAuthorities,
+                           CurrentUser currentUser,
+                           Clock clock) {
         this.permissionMapper = permissionMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.userRoleMapper = userRoleMapper;
         this.rbacAuthorities = rbacAuthorities;
+        this.currentUser = currentUser;
+        this.clock = clock;
     }
 
     @Override
@@ -60,9 +69,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                 new Page<>(bounds.page(), bounds.size()),
                 Wrappers.<SysRole>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
-                                .like(SysRole::getCode, keyword)
-                                .or()
-                                .like(SysRole::getName, keyword))
+                                .apply("code ILIKE {0} OR name ILIKE {0}", OptionQuery.pattern(keyword)))
                         .orderByDesc(SysRole::getCreatedAt)
                         // Tiebreaker: rows created in the same millisecond have no stable order in
                         // PostgreSQL, so LIMIT/OFFSET paging could show one twice and skip another.
@@ -101,18 +108,19 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     }
 
     @Override
+    @Audited(action = "role.create", targetType = "role", targetIdFromResult = true)
     public SysRole create(CreateRoleRequest request) {
         String name = request.name() == null ? "" : request.name().trim();
         if (name.isEmpty()) {
-            throw new BizException(HttpStatus.BAD_REQUEST, "Role name must not be blank");
+            throw new BizException(BizCode.ROLE_NAME_REQUIRED);
         }
         String description = request.description() == null ? "" : request.description().trim();
         String code = request.code();
         if (count(Wrappers.<SysRole>lambdaQuery().eq(SysRole::getCode, code)) > 0) {
-            throw new BizException(HttpStatus.CONFLICT, "Role code already exists");
+            throw new BizException(BizCode.ROLE_CODE_TAKEN);
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(clock);
         SysRole role = new SysRole();
         role.setCode(code);
         role.setName(name);
@@ -126,13 +134,14 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
             save(role);
         } catch (DuplicateKeyException e) {
             // Two requests can pass the count above at the same time; the unique index decides.
-            throw new BizException(HttpStatus.CONFLICT, "Role code already exists");
+            throw new BizException(BizCode.ROLE_CODE_TAKEN);
         }
         return require(role.getId());
     }
 
     @Override
     @Transactional
+    @Audited(action = "role.update", targetType = "role", recordChanges = true)
     public SysRole update(Long id, UpdateRoleRequest request) {
         // Locked like delete and assignPermissions: the delegation ceiling below reads the role's
         // current permissions, so a concurrent replacement must not land between that read and
@@ -145,10 +154,14 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         if (request.name() != null) {
             name = request.name().trim();
             if (name.isEmpty()) {
-                throw new BizException(HttpStatus.BAD_REQUEST, "Role name must not be blank");
+                throw new BizException(BizCode.ROLE_NAME_REQUIRED);
             }
         }
         String description = request.description() == null ? null : request.description().trim();
+
+        AuditTrail.change("name", role.getName(), request.name());
+        AuditTrail.change("description", role.getDescription(), request.description());
+        AuditTrail.change("status", role.getStatus(), request.status());
 
         // Write only the fields that were sent: writing the whole row back would undo a concurrent
         // permission change or delete, because those happened after this row was read.
@@ -157,16 +170,17 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
                 .set(request.name() != null, SysRole::getName, name)
                 .set(request.description() != null, SysRole::getDescription, description)
                 .set(request.status() != null, SysRole::getStatus, request.status())
-                .set(SysRole::getUpdatedAt, OffsetDateTime.now())
+                .set(SysRole::getUpdatedAt, OffsetDateTime.now(clock))
                 .update();
         if (!updated) {
-            throw new BizException(HttpStatus.NOT_FOUND, "Role not found");
+            throw new BizException(BizCode.ROLE_NOT_FOUND);
         }
         return require(id);
     }
 
     @Override
     @Transactional
+    @Audited(action = "role.delete", targetType = "role")
     public void delete(Long id) {
         // Serialize against assignPermissions and against a user update that is resolving this
         // role, so the count cannot be invalidated between the check and the logic delete.
@@ -183,13 +197,14 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
 
     @Override
     @Transactional
+    @Audited(action = "role.assign-permissions", targetType = "role", recordChanges = true)
     public RoleDetailVO assignPermissions(Long id, AssignPermissionsRequest request) {
         // The row lock also serializes two replacements, otherwise both could insert and the
         // resulting set would be their union instead of the set the later caller submitted.
         SysRole role = requireForUpdate(id);
         RoleGuards.checkPermissionsEditable(role);
 
-        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        List<String> callerPermissions = currentUser.permissionCodes();
         PrivilegeGuards.checkCanModifyRole(
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD), callerPermissions,
                 rolePermissionMapper.selectPermissionCodes(id));
@@ -206,18 +221,21 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
             String missing = codes.stream()
                     .filter(code -> !known.contains(code))
                     .collect(Collectors.joining(", "));
-            throw new BizException(HttpStatus.BAD_REQUEST, "Unknown permission: " + missing);
+            throw new BizException(BizCode.UNKNOWN_PERMISSION, "Unknown permission: " + missing);
         }
 
         PrivilegeGuards.checkCanGrantPermissions(
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD), callerPermissions, codes);
+
+        AuditTrail.change("permissions",
+                rolePermissionMapper.selectPermissionCodes(id), codes);
 
         rolePermissionMapper.deleteByRoleId(id);
         permissions.forEach(permission -> rolePermissionMapper.insert(id, permission.getId()));
         // The permissions changed even though no column of sys_role did, so the timestamp must too.
         lambdaUpdate()
                 .eq(SysRole::getId, id)
-                .set(SysRole::getUpdatedAt, OffsetDateTime.now())
+                .set(SysRole::getUpdatedAt, OffsetDateTime.now(clock))
                 .update();
         return get(id);
     }
@@ -228,7 +246,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
      * or replace its permissions with the subset it owns and silently strip the rest.
      */
     private void checkCanModifyRole(SysRole role) {
-        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        List<String> callerPermissions = currentUser.permissionCodes();
         PrivilegeGuards.checkCanModifyRole(
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD),
                 callerPermissions,
@@ -248,7 +266,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     private SysRole require(Long id) {
         SysRole role = getById(id);
         if (role == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "Role not found");
+            throw new BizException(BizCode.ROLE_NOT_FOUND);
         }
         return role;
     }
@@ -257,7 +275,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
     private SysRole requireForUpdate(Long id) {
         SysRole role = lambdaQuery().eq(SysRole::getId, id).last("FOR UPDATE").one();
         if (role == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "Role not found");
+            throw new BizException(BizCode.ROLE_NOT_FOUND);
         }
         return role;
     }

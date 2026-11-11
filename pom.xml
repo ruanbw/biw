@@ -99,6 +99,21 @@
             <version>${sa-token.version}</version>
         </dependency>
 
+        <!-- AOP: AuditAspect applies @Audited, so audit lives in one place instead of being called
+             by hand from every service method. Spring Boot 4 no longer ships a starter for it:
+             spring-aop arrives with spring-context, only the AspectJ weaver is needed. -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
+
+        <!-- Health endpoint. Without it an orchestrator has no probe to answer, and the template
+             would teach every derived project to skip it. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- MapStruct: property mapping, generated at compile time (no reflection) -->
         <dependency>
             <groupId>org.mapstruct</groupId>

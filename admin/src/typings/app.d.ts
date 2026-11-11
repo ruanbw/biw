@@ -534,6 +534,12 @@ declare namespace App {
           createTitle: string;
           editTitle: string;
           password: string;
+          usernameRequired: string;
+          usernameInvalid: string;
+          passwordRequired: string;
+          passwordTooShort: string;
+          passwordTooLong: string;
+          passwordTooManyBytes: string;
           resetPasswordTitle: string;
           newPassword: string;
           enabled: string;

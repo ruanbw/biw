@@ -1,12 +1,12 @@
 package com.biw.controller;
 
-import cn.dev33.satoken.stp.StpUtil;
 import com.biw.common.api.Result;
+import com.biw.common.security.CurrentUser;
+import com.biw.common.security.SessionRevoker;
 import com.biw.config.OpenApiConfig;
 import com.biw.entity.user.dto.LoginRequest;
-import com.biw.entity.user.vo.LoginVO;
 import com.biw.entity.user.SysUser;
-import com.biw.service.RbacAuthorities;
+import com.biw.entity.user.vo.LoginVO;
 import com.biw.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -28,18 +28,21 @@ import java.util.List;
 public class AuthController {
 
     private final UserService userService;
-    private final RbacAuthorities rbacAuthorities;
+    private final CurrentUser currentUser;
+    private final SessionRevoker sessionRevoker;
 
-    public AuthController(UserService userService, RbacAuthorities rbacAuthorities) {
+    public AuthController(UserService userService, CurrentUser currentUser, SessionRevoker sessionRevoker) {
         this.userService = userService;
-        this.rbacAuthorities = rbacAuthorities;
+        this.currentUser = currentUser;
+        this.sessionRevoker = sessionRevoker;
     }
 
     @Operation(summary = "登录",
             description = "校验用户名和密码，成功后返回 token；后续请求在请求头 `satoken` 中携带 `tokenValue`。")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "登录成功"),
-            @ApiResponse(responseCode = "401", description = "用户名或密码错误，或账号已被禁用")
+            @ApiResponse(responseCode = "401", description = "用户名或密码错误，或账号已被禁用"),
+            @ApiResponse(responseCode = "429", description = "失败次数过多，暂时拒绝登录")
     })
     @PostMapping("/login")
     public Result<LoginVO> login(@Valid @RequestBody LoginRequest request) {
@@ -50,8 +53,8 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "已登出")
     @PostMapping("/logout")
     public Result<Void> logout() {
-        if (StpUtil.isLogin()) {
-            StpUtil.logout();
+        if (currentUser.isLogin()) {
+            sessionRevoker.revokeCurrent();
         }
         return Result.ok();
     }
@@ -72,6 +75,6 @@ public class AuthController {
     @SecurityRequirement(name = OpenApiConfig.TOKEN_SCHEME)
     @GetMapping("/permissions")
     public Result<List<String>> permissions() {
-        return Result.ok(rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong()));
+        return Result.ok(currentUser.permissionCodes());
     }
 }

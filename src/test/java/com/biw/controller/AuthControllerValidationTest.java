@@ -5,6 +5,7 @@ import com.biw.common.exception.GlobalExceptionHandler;
 import com.biw.entity.user.SysUser;
 import com.biw.entity.user.dto.LoginRequest;
 import com.biw.service.RbacAuthorities;
+import com.biw.support.TestDoubles;
 import com.biw.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,8 +36,8 @@ class AuthControllerValidationTest {
         when(userService.me()).thenReturn(new SysUser());
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AuthController(userService, rbacAuthorities))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .standaloneSetup(new AuthController(userService, TestDoubles.anonymous(), TestDoubles.sessionRevoker()))
+                .setControllerAdvice(TestDoubles.handler())
                 .build();
     }
 

@@ -1,6 +1,7 @@
 package com.biw.controller;
 
 import com.biw.common.exception.GlobalExceptionHandler;
+import com.biw.support.TestDoubles;
 import com.biw.service.RoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class RoleControllerValidationTest {
     void setUp() {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new RoleController(mock(RoleService.class)))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(TestDoubles.handler())
                 .build();
     }
 

@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.biw.entity.rbac.PermissionCodes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -52,7 +53,10 @@ class AuthorizationAnnotationTest {
             "GET /api/auth/me",
             "GET /api/auth/permissions");
 
+    // Actuator registers a second HandlerMapping (controllerEndpointHandlerMapping), so the
+    // bean has to be named. This one only carries the request mappings the API is checked on.
     @Autowired
+    @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping handlerMapping;
 
     @Test

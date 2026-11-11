@@ -11,8 +11,13 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 import org.mapstruct.NullValuePropertyMappingStrategy;
 
+import java.time.OffsetDateTime;
+
 /**
  * DTO &lt;-&gt; entity mapping for {@link SysUser}. Implemented by MapStruct at compile time.
+ * <p>
+ * The timestamps are passed in rather than read here: {@code OffsetDateTime.now()} inside a
+ * mapping expression is a static dependency that no test can control.
  */
 @Mapper(componentModel = "spring", imports = {UserStatus.class})
 public interface UserConverter {
@@ -28,9 +33,9 @@ public interface UserConverter {
     @Mapping(target = "roleCodes", ignore = true)
     @Mapping(target = "status", source = "request.status", defaultExpression = "java(UserStatus.ENABLED)")
     @Mapping(target = "deleted", constant = "0")
-    @Mapping(target = "createdAt", expression = "java(java.time.OffsetDateTime.now())")
-    @Mapping(target = "updatedAt", expression = "java(java.time.OffsetDateTime.now())")
-    SysUser toEntity(CreateUserRequest request, String username, String passwordHash);
+    @Mapping(target = "createdAt", source = "now")
+    @Mapping(target = "updatedAt", source = "now")
+    SysUser toEntity(CreateUserRequest request, String username, String passwordHash, OffsetDateTime now);
 
     /**
      * Copies the present fields of {@code request} onto an existing row and stamps
@@ -42,10 +47,10 @@ public interface UserConverter {
     @Mapping(target = "passwordHash", ignore = true)
     @Mapping(target = "deleted", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "nickname", source = "nickname", qualifiedByName = "trim")
+    @Mapping(target = "nickname", source = "request.nickname", qualifiedByName = "trim")
     @Mapping(target = "roleCodes", ignore = true)
-    @Mapping(target = "updatedAt", expression = "java(java.time.OffsetDateTime.now())")
-    void applyUpdate(UpdateUserRequest request, @MappingTarget SysUser user);
+    @Mapping(target = "updatedAt", source = "now")
+    void applyUpdate(UpdateUserRequest request, @MappingTarget SysUser user, OffsetDateTime now);
 
     @Named("trimToEmpty")
     default String trimToEmpty(String value) {

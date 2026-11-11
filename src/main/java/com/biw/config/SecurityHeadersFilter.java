@@ -19,9 +19,15 @@ import java.io.IOException;
  * {@code Strict-Transport-Security} is sent unconditionally; a browser ignores it when the
  * response arrives over plain HTTP, so it is harmless in local development and effective as soon
  * as the service sits behind TLS.
+ * <p>
+ * The CSP is {@code default-src 'none'}: this origin serves no HTML and loads no subresource. The
+ * Swagger UI is the one exception — it is served from this origin in dev/test and needs scripts,
+ * so those paths are skipped instead of breaking the documentation.
  */
 @Component
 public class SecurityHeadersFilter extends OncePerRequestFilter {
+
+    private static final String CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -30,10 +36,20 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("X-Frame-Options", "DENY");
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("Strict-Transport-Security", "max-age=31536000");
+        if (!isDocumentation(request)) {
+            response.setHeader("Content-Security-Policy", CSP);
+        }
         // No user records in a shared cache, in the browser cache, or in a proxy.
         if (request.getRequestURI().startsWith("/api/")) {
             response.setHeader("Cache-Control", "no-store");
         }
         chain.doFilter(request, response);
+    }
+
+    /** Swagger UI and the OpenAPI document: static assets this service hosts itself. */
+    private static boolean isDocumentation(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")
+                || path.startsWith("/webjars");
     }
 }

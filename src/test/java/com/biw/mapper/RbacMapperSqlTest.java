@@ -35,13 +35,16 @@ class RbacMapperSqlTest {
     }
 
     @Test
-    void buildsTheActiveAdminLookupAndItsRowLock() {
-        String sql = sql("com.biw.mapper.SysUserRoleMapper.selectActiveAdminUserIdsForUpdate", null);
+    void buildsTheActiveAdminLookupWithoutARowLock() {
+        // The invariant is now protected by pg_advisory_xact_lock (AdminGuardLock), not by a row
+        // lock on sys_user: the fact being protected lives in sys_user_role, which that lock
+        // cannot cover. A FOR UPDATE here would be misleading.
+        String sql = sql("com.biw.mapper.SysUserRoleMapper.selectAllActiveAdminUserIds", null);
 
         assertThat(sql)
                 .contains("r.code = 'ADMIN'")
                 .contains("ORDER BY u.id")
-                .contains("FOR UPDATE OF u");
+                .doesNotContain("FOR UPDATE");
     }
 
     @Test

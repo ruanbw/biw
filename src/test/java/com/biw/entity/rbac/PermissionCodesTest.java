@@ -10,23 +10,32 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The catalog in {@link PermissionCodes} and the seed in sql/init.sql must agree.
+ * The catalog in {@link PermissionCodes} and the seed in {@code sql/init.sql} must agree.
  * Without this check a new code could end up in an annotation but never in
  * {@code sys_permission}, leaving an endpoint no role can be granted.
  */
 class PermissionCodesTest {
 
+    private static final Path INIT_SQL =
+            Path.of(System.getProperty("user.dir"), "sql", "init.sql");
+
     @Test
     void seededCatalogMatchesTheConstants() throws IOException {
-        Path initScript = Path.of(System.getProperty("user.dir"), "sql", "init.sql");
-        assertThat(initScript).exists();
-        String sql = Files.readString(initScript, StandardCharsets.UTF_8);
+        assertThat(INIT_SQL).as("sql/init.sql is the single source of the schema").exists();
+        String sql = Files.readString(INIT_SQL, StandardCharsets.UTF_8);
 
         for (String code : PermissionCodes.ALL) {
-            assertThat(sql).contains("('" + code + "'");
+            assertThat(sql)
+                    .as("permission code %s must be inserted by sql/init.sql", code)
+                    .contains("('" + code + "'");
         }
         // ADMIN and USER are the built-in roles the code reasons about.
         assertThat(sql).contains("('" + RoleCodes.ADMIN + "'");
         assertThat(sql).contains("('" + RoleCodes.USER + "'");
+    }
+
+    @Test
+    void theCatalogHasNoDuplicates() {
+        assertThat(PermissionCodes.ALL).doesNotHaveDuplicates().isNotEmpty();
     }
 }

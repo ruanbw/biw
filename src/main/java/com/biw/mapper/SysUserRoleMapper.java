@@ -71,9 +71,10 @@ public interface SysUserRoleMapper {
     long countUsersByRoleId(@Param("roleId") Long roleId);
 
     /**
-     * Active admins, locked until the transaction ends. Two requests deleting or demoting an
-     * admin must see each other, otherwise both can see two admins and leave none. ORDER BY id
-     * gives every caller the same lock order, so they cannot deadlock.
+     * Every enabled admin, without locking. The caller must already hold the admin guard lock
+     * ({@code pg_advisory_xact_lock}), which serialises the transactions whose decision depends
+     * on this count — a row lock on {@code sys_user} cannot, because the fact being protected
+     * lives in {@code sys_user_role}.
      */
     @Select("""
             SELECT u.id
@@ -83,9 +84,8 @@ public interface SysUserRoleMapper {
             WHERE u.deleted = 0 AND u.status = 'ENABLED'
               AND r.code = 'ADMIN' AND r.deleted = 0 AND r.status = 'ENABLED'
             ORDER BY u.id
-            FOR UPDATE OF u
             """)
-    List<Long> selectActiveAdminUserIdsForUpdate();
+    List<Long> selectAllActiveAdminUserIds();
 
     /** Which of the given users are active admins right now, without locking. */
     @Select("""

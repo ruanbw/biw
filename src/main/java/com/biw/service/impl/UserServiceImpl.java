@@ -1,6 +1,5 @@
 package com.biw.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
@@ -8,8 +7,14 @@ import com.biw.common.api.OptionQuery;
 import com.biw.common.api.OptionVO;
 import com.biw.common.api.PageBounds;
 import com.biw.common.api.PageResult;
-import com.biw.common.audit.SecurityAudit;
+import com.biw.common.audit.AuditTrail;
+import com.biw.common.audit.Audited;
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
+import com.biw.common.security.AdminGuardLock;
+import com.biw.common.security.CurrentUser;
+import com.biw.common.security.SessionIssuer;
+import com.biw.common.security.SessionRevoker;
 import com.biw.common.web.ClientAddress;
 import com.biw.convert.UserConverter;
 import com.biw.entity.rbac.PermissionCodes;
@@ -31,13 +36,13 @@ import com.biw.service.RbacAuthorities;
 import com.biw.service.UserService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashSet;
@@ -52,7 +57,6 @@ import java.util.stream.Collectors;
 @Service
 public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements UserService {
 
-
     private final PasswordEncoder passwordEncoder;
     private final UserConverter userConverter;
     private final LoginThrottle loginThrottle;
@@ -60,20 +64,33 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final RbacAuthorities rbacAuthorities;
+    private final CurrentUser currentUser;
+    private final SessionIssuer sessionIssuer;
+    private final SessionRevoker sessionRevoker;
+    private final AdminGuardLock adminGuardLock;
+    private final Clock clock;
     /** Compared against when the account is unknown or disabled, so both cases cost one BCrypt call. */
     private final String dummyPasswordHash;
 
     public UserServiceImpl(PasswordEncoder passwordEncoder, UserConverter userConverter,
                            StringRedisTemplate redis, SysRoleMapper roleMapper,
                            SysRolePermissionMapper rolePermissionMapper,
-                           SysUserRoleMapper userRoleMapper, RbacAuthorities rbacAuthorities) {
+                           SysUserRoleMapper userRoleMapper, RbacAuthorities rbacAuthorities,
+                           CurrentUser currentUser, SessionIssuer sessionIssuer,
+                           SessionRevoker sessionRevoker, AdminGuardLock adminGuardLock,
+                           Clock clock, LoginThrottlePolicy loginThrottlePolicy) {
         this.passwordEncoder = passwordEncoder;
         this.userConverter = userConverter;
-        this.loginThrottle = new LoginThrottle(redis);
+        this.loginThrottle = new LoginThrottle(redis, loginThrottlePolicy);
         this.roleMapper = roleMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.userRoleMapper = userRoleMapper;
         this.rbacAuthorities = rbacAuthorities;
+        this.currentUser = currentUser;
+        this.sessionIssuer = sessionIssuer;
+        this.sessionRevoker = sessionRevoker;
+        this.adminGuardLock = adminGuardLock;
+        this.clock = clock;
         this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
@@ -84,12 +101,8 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         checkPasswordBytes(request.password());
         String username = normalize(request.username());
         String clientAddress = ClientAddress.current();
-        try {
-            loginThrottle.check(username, clientAddress);
-        } catch (BizException e) {
-            SecurityAudit.failure("auth.login.locked", "username=" + username);
-            throw e;
-        }
+        // A refused attempt is audited by GlobalExceptionHandler from the code carried here.
+        loginThrottle.check(username, clientAddress);
 
         SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
         boolean enabled = user != null && user.getStatus() == UserStatus.ENABLED;
@@ -100,24 +113,24 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 enabled ? user.getPasswordHash() : dummyPasswordHash);
         if (!enabled || !passwordMatches) {
             loginThrottle.record(username, clientAddress);
-            SecurityAudit.failure("auth.login.failed", "username=" + username + " reason="
-                    + (user == null ? "unknown-account" : enabled ? "wrong-password" : "disabled-account"));
-            throw new BizException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
+            // The audit event names the outcome; the reason (unknown / disabled / wrong password)
+            // is deliberately not part of the response, so it must not be inferred from timing.
+            throw new BizException(BizCode.BAD_CREDENTIALS);
         }
 
         // Only the account bucket: a successful login proves ownership of that name, but a caller
         // must not be able to reset its own client bucket by logging into an account it owns.
         loginThrottle.clear(username);
-        StpUtil.login(user.getId());
-        return new LoginVO(StpUtil.getTokenName(), StpUtil.getTokenValue(),
-                StpUtil.getTokenTimeout(), withRoleCodes(user));
+        SessionIssuer.IssuedToken token = sessionIssuer.login(user.getId());
+        return new LoginVO(token.tokenName(), token.tokenValue(), token.timeoutSeconds(), withRoleCodes(user));
     }
 
     @Override
     public SysUser me() {
-        SysUser user = getById(StpUtil.getLoginIdAsLong());
+        Long id = currentUser.id();
+        SysUser user = getById(id);
         if (user == null) {
-            throw new BizException(HttpStatus.UNAUTHORIZED, "Session is no longer valid");
+            throw new BizException(BizCode.SESSION_INVALID);
         }
         return withRoleCodes(user);
     }
@@ -126,7 +139,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     public SysUser get(Long id) {
         SysUser user = getById(id);
         if (user == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+            throw new BizException(BizCode.USER_NOT_FOUND);
         }
         return withRoleCodes(user);
     }
@@ -138,9 +151,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 new Page<>(bounds.page(), bounds.size()),
                 Wrappers.<SysUser>lambdaQuery()
                         .and(StringUtils.hasText(keyword), q -> q
-                                .like(SysUser::getUsername, keyword)
-                                .or()
-                                .like(SysUser::getNickname, keyword))
+                                .apply("username ILIKE {0} OR nickname ILIKE {0}", OptionQuery.pattern(keyword)))
                         .orderByDesc(SysUser::getCreatedAt)
                         // Tiebreaker: rows created in the same millisecond have no stable order in
                         // PostgreSQL, so LIMIT/OFFSET paging could show one twice and skip another.
@@ -181,13 +192,14 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     @Override
     @Transactional
+    @Audited(action = "user.create", targetType = "user", targetIdFromResult = true)
     public SysUser create(CreateUserRequest request) {
         String username = normalize(request.username());
         if (username == null || username.isBlank()) {
-            throw new BizException(HttpStatus.BAD_REQUEST, "Username must not be blank");
+            throw new BizException(BizCode.USERNAME_REQUIRED);
         }
         if (count(Wrappers.<SysUser>lambdaQuery().eq(SysUser::getUsername, username)) > 0) {
-            throw new BizException(HttpStatus.CONFLICT, "Username already exists");
+            throw new BizException(BizCode.USERNAME_TAKEN);
         }
         checkPasswordBytes(request.password());
 
@@ -200,11 +212,12 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         List<Long> roleIds = resolveRoleIds(effectiveCodes);
         checkCanAssignRoles(roleIds);
 
-        SysUser user = userConverter.toEntity(request, username, passwordEncoder.encode(request.password()));
+        SysUser user = userConverter.toEntity(request, username,
+                passwordEncoder.encode(request.password()), OffsetDateTime.now(clock));
         try {
             save(user);
         } catch (DuplicateKeyException e) {
-            throw new BizException(HttpStatus.CONFLICT, "Username already exists");
+            throw new BizException(BizCode.USERNAME_TAKEN);
         }
         roleIds.forEach(roleId -> userRoleMapper.insert(user.getId(), roleId));
         return get(user.getId());
@@ -212,7 +225,12 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     @Override
     @Transactional
+    @Audited(action = "user.update", targetType = "user", recordChanges = true)
     public SysUser update(Long id, UpdateUserRequest request) {
+        // First statement: the admin-count invariant is a property of a set of rows, and this
+        // transaction may change that set. See AdminGuardLock.
+        adminGuardLock.acquire();
+
         SysUser user = get(id);
 
         List<String> assignedRoles = user.getRoleCodes();
@@ -240,10 +258,14 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         List<Long> roleIds = request.roleCodes() == null ? null : resolveRoleIds(request.roleCodes());
         checkCanAssignRoles(roleIds);
 
-        UserGuards.checkUpdate(user.getId(), StpUtil.getLoginIdAsLong(), wasActiveAdmin,
-                staysActiveAdmin, roleChange, disabling, this::countActiveAdminsForUpdate);
+        UserGuards.checkUpdate(user.getId(), currentUser.id(), wasActiveAdmin,
+                staysActiveAdmin, roleChange, disabling, this::countActiveAdmins);
 
-        userConverter.applyUpdate(request, user);
+        AuditTrail.change("nickname", user.getNickname(), request.nickname());
+        AuditTrail.change("status", user.getStatus(), request.status());
+        AuditTrail.change("roles", assignedRoles, request.roleCodes());
+
+        userConverter.applyUpdate(request, user, OffsetDateTime.now(clock));
         // Write only the fields that were sent: writing the whole row back would undo a concurrent
         // password reset or delete, because those changes happened after this row was read.
         boolean updated = lambdaUpdate()
@@ -253,33 +275,42 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                 .set(SysUser::getUpdatedAt, user.getUpdatedAt())
                 .update();
         if (!updated) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+            throw new BizException(BizCode.USER_NOT_FOUND);
         }
         if (roleIds != null) {
             replaceRoles(id, roleIds);
         }
 
         if (disabling) {
-            StpUtil.logout(id);
+            sessionRevoker.revokeAll(id);
         }
         return get(id);
     }
 
     @Override
     @Transactional
+    @Audited(action = "user.delete", targetType = "user")
     public void delete(Long id) {
-        batchDelete(List.of(id));
+        batchDeleteInternal(List.of(id));
     }
 
     @Override
     @Transactional
+    @Audited(action = "user.batch-delete", targetType = "user")
     public void batchDelete(List<Long> ids) {
+        batchDeleteInternal(ids);
+    }
+
+    private void batchDeleteInternal(List<Long> ids) {
+        adminGuardLock.acquire();
+
         List<Long> distinct = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (distinct.isEmpty() || distinct.size() > 100) {
-            throw new BizException(HttpStatus.BAD_REQUEST, "ids must contain between 1 and 100 items");
+            throw new BizException(BizCode.IDS_OUT_OF_RANGE);
         }
 
-        boolean deletingSelf = distinct.contains(StpUtil.getLoginIdAsLong());
+        Long me = currentUser.id();
+        boolean deletingSelf = distinct.contains(me);
         long deletingAdmins = userRoleMapper.selectActiveAdminUserIds(distinct).size();
         boolean deletingAnyAdmin = userRoleMapper.selectRoleCodesByUserIds(distinct).stream()
                 .anyMatch(row -> RoleCodes.ADMIN.equals(row.getCode()));
@@ -288,19 +319,20 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
             PrivilegeGuards.checkCanModifyAdmin(callerIsAdmin(), true);
         }
         checkCanModifyTargets(distinct);
-        UserGuards.checkDelete(deletingSelf, deletingAdmins, this::countActiveAdminsForUpdate);
+        UserGuards.checkDelete(deletingSelf, deletingAdmins, this::countActiveAdmins);
 
         removeByIds(distinct);
         distinct.forEach(userRoleMapper::deleteByUserId);
-        distinct.forEach(StpUtil::logout);
+        distinct.forEach(sessionRevoker::revokeAll);
     }
 
     @Override
     @Transactional
+    @Audited(action = "user.reset-password", targetType = "user")
     public void resetPassword(Long id, ResetPasswordRequest request) {
         SysUser target = getById(id);
         if (target == null) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+            throw new BizException(BizCode.USER_NOT_FOUND);
         }
         List<String> targetRoles = userRoleMapper.selectRoleCodes(id);
         if (targetRoles.contains(RoleCodes.ADMIN)) {
@@ -313,12 +345,12 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean updated = lambdaUpdate()
                 .eq(SysUser::getId, id)
                 .set(SysUser::getPasswordHash, passwordEncoder.encode(request.newPassword()))
-                .set(SysUser::getUpdatedAt, OffsetDateTime.now())
+                .set(SysUser::getUpdatedAt, OffsetDateTime.now(clock))
                 .update();
         if (!updated) {
-            throw new BizException(HttpStatus.NOT_FOUND, "User not found");
+            throw new BizException(BizCode.USER_NOT_FOUND);
         }
-        StpUtil.logout(id);
+        sessionRevoker.revokeAll(id);
     }
 
     private SysUser withRoleCodes(SysUser user) {
@@ -362,7 +394,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
                     .map(String::valueOf)
                     .sorted()
                     .collect(Collectors.joining(", "));
-            throw new BizException(HttpStatus.BAD_REQUEST, "Unknown role: " + missing);
+            throw new BizException(BizCode.UNKNOWN_ROLE, "Unknown role: " + missing);
         }
         return roles.stream().map(SysRole::getId).toList();
     }
@@ -373,17 +405,16 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     }
 
     /**
-     * Counts enabled admins and locks their rows until the transaction ends. Without the lock two
+     * Counts enabled admins. The caller must hold {@link AdminGuardLock}: without it two
      * concurrent requests can each see two admins and then remove one, leaving no admin at all —
-     * a state the API can never recover from. {@code ORDER BY id} keeps the lock order identical
-     * for every caller, so the two cannot deadlock.
+     * a state the API can never recover from.
      */
-    private long countActiveAdminsForUpdate() {
-        return userRoleMapper.selectActiveAdminUserIdsForUpdate().size();
+    private long countActiveAdmins() {
+        return userRoleMapper.selectAllActiveAdminUserIds().size();
     }
 
     private boolean callerIsAdmin() {
-        return rbacAuthorities.isAdmin(StpUtil.getLoginIdAsLong());
+        return currentUser.isAdmin();
     }
 
     /**
@@ -402,7 +433,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (targetPermissions.isEmpty()) {
             return;
         }
-        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        List<String> callerPermissions = currentUser.permissionCodes();
         PrivilegeGuards.checkCanModifyTarget(
                 callerPermissions.contains(PermissionCodes.ALL_WILDCARD),
                 callerPermissions,
@@ -418,7 +449,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         if (roleIds == null || roleIds.isEmpty()) {
             return;
         }
-        List<String> callerPermissions = rbacAuthorities.permissionCodes(StpUtil.getLoginIdAsLong());
+        List<String> callerPermissions = currentUser.permissionCodes();
         if (callerPermissions.contains(PermissionCodes.ALL_WILDCARD)) {
             return;
         }
@@ -432,7 +463,7 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
 
     private static void checkPasswordBytes(String password) {
         if (password != null && password.getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new BizException(HttpStatus.BAD_REQUEST, "Password must not exceed 72 bytes");
+            throw new BizException(BizCode.PASSWORD_TOO_LONG);
         }
     }
 }

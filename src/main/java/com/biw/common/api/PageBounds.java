@@ -1,7 +1,7 @@
 package com.biw.common.api;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
-import org.springframework.http.HttpStatus;
 
 /**
  * Sanitised {@code page} / {@code size} for a list query.
@@ -26,8 +26,7 @@ public record PageBounds(long page, long size) {
         long boundedPage = Math.min(Math.max(page, 1), MAX_PAGE);
         long boundedSize = Math.min(Math.max(size, 1), MAX_SIZE);
         if ((boundedPage - 1) * boundedSize > MAX_OFFSET) {
-            throw new BizException(HttpStatus.BAD_REQUEST,
-                    "Page is too deep; narrow the search instead of paging further");
+            throw new BizException(BizCode.PAGE_TOO_DEEP);
         }
         return new PageBounds(boundedPage, boundedSize);
     }

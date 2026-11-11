@@ -14,6 +14,30 @@ spring:
     # Omits nulls from responses; Result.data opts back in with @JsonInclude(ALWAYS).
     default-property-inclusion: non_null
 
+# ---------------------------------------------------------------------------
+# Application configuration
+# ---------------------------------------------------------------------------
+biw:
+  bootstrap:
+    admin:
+      # Optional. sql/init.sql already seeds an 'admin' account for a fresh development database,
+      # so these stay empty by default. Set both to create the first administrator from the
+      # environment instead — useful for a deployment that must not ship a committed credential.
+      # Only runs when the account table is empty.
+      username: ${BIW_BOOTSTRAP_ADMIN_USERNAME:}
+      password: ${BIW_BOOTSTRAP_ADMIN_PASSWORD:}
+  security:
+    login-throttle:
+      # Defaults are template decisions, not rules: a derived project with a different user base
+      # should review them. See docs/EXTENDING.md.
+      max-account-failures: ${BIW_LOGIN_MAX_ACCOUNT_FAILURES:10}
+      max-client-failures: ${BIW_LOGIN_MAX_CLIENT_FAILURES:50}
+      window: ${BIW_LOGIN_WINDOW:5m}
+  web:
+    cors:
+      # Empty means no CORS headers are sent; the Vite dev proxy makes them unnecessary locally.
+      allowed-origins: ${BIW_CORS_ALLOWED_ORIGINS:}
+
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful

@@ -1,6 +1,7 @@
 package com.biw.controller;
 
 import com.biw.common.exception.GlobalExceptionHandler;
+import com.biw.support.TestDoubles;
 import com.biw.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class UserControllerValidationTest {
     void setUp() {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new UserController(mock(UserService.class)))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(TestDoubles.handler())
                 .build();
     }
 
@@ -81,8 +82,10 @@ class UserControllerValidationTest {
                         .content("{\"username\":\"bob\",\"password\":\"aaaaaaaa\",\"status\":\"MAYBE\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message", containsString("status")))
-                .andExpect(jsonPath("$.message", containsString("ENABLED")));
+                // Asserted on the stable code, not the wording: the message may be reworded or
+                // translated, and Jackson 3 no longer reports the field name on the exception.
+                .andExpect(jsonPath("$.errorCode").value("MALFORMED_BODY"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
     @Test

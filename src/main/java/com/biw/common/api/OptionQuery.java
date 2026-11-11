@@ -1,7 +1,7 @@
 package com.biw.common.api;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
-import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -34,7 +34,7 @@ public final class OptionQuery {
     public static List<Long> distinctIds(List<Long> ids) {
         List<Long> distinct = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (distinct.size() > MAX_IDS) {
-            throw new BizException(HttpStatus.BAD_REQUEST,
+            throw new BizException(BizCode.IDS_OUT_OF_RANGE,
                     "ids must contain at most " + MAX_IDS + " items");
         }
         return distinct;

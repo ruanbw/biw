@@ -1,8 +1,8 @@
 package com.biw.service.impl;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
 import com.biw.entity.rbac.RoleCodes;
-import org.springframework.http.HttpStatus;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -27,7 +27,7 @@ final class PrivilegeGuards {
     /** Only a real admin may put the ADMIN role on an account. */
     static void checkCanGrantAdmin(boolean callerIsAdmin, Collection<String> roleCodes) {
         if (!callerIsAdmin && roleCodes != null && roleCodes.contains(RoleCodes.ADMIN)) {
-            throw new BizException(HttpStatus.FORBIDDEN,
+            throw new BizException(BizCode.ADMIN_REQUIRED,
                     "Only an administrator can grant the ADMIN role");
         }
     }
@@ -38,7 +38,7 @@ final class PrivilegeGuards {
      */
     static void checkCanModifyAdmin(boolean callerIsAdmin, boolean targetHasAdminRole) {
         if (!callerIsAdmin && targetHasAdminRole) {
-            throw new BizException(HttpStatus.FORBIDDEN,
+            throw new BizException(BizCode.ADMIN_REQUIRED,
                     "Only an administrator can modify an administrator");
         }
     }
@@ -51,7 +51,7 @@ final class PrivilegeGuards {
         }
         String denied = missing(callerPermissions, requestedPermissions);
         if (!denied.isEmpty()) {
-            throw new BizException(HttpStatus.FORBIDDEN,
+            throw new BizException(BizCode.CANNOT_GRANT_EXCEEDING,
                     "Cannot grant permissions you do not have: " + denied);
         }
     }
@@ -64,7 +64,7 @@ final class PrivilegeGuards {
         }
         String denied = missing(callerPermissions, targetPermissions);
         if (!denied.isEmpty()) {
-            throw new BizException(HttpStatus.FORBIDDEN,
+            throw new BizException(BizCode.CANNOT_MODIFY_EXCEEDING,
                     "Cannot modify a user with permissions you do not have: " + denied);
         }
     }
@@ -81,7 +81,7 @@ final class PrivilegeGuards {
         }
         String denied = missing(callerPermissions, rolePermissions);
         if (!denied.isEmpty()) {
-            throw new BizException(HttpStatus.FORBIDDEN,
+            throw new BizException(BizCode.CANNOT_MODIFY_EXCEEDING,
                     "Cannot modify a role that grants permissions you do not have: " + denied);
         }
     }

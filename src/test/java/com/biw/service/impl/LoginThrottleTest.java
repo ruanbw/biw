@@ -2,6 +2,7 @@ package com.biw.service.impl;
 
 import com.biw.common.exception.BizException;
 import org.junit.jupiter.api.Test;
+import com.biw.support.TestDoubles;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -25,7 +26,7 @@ class LoginThrottleTest {
     @SuppressWarnings("unchecked")
     private final ValueOperations<String, String> values = mock(ValueOperations.class);
     private final StringRedisTemplate redis = mock(StringRedisTemplate.class);
-    private final LoginThrottle throttle = new LoginThrottle(redis);
+    private final LoginThrottle throttle = new LoginThrottle(redis, TestDoubles.loginThrottlePolicy());
 
     {
         when(redis.opsForValue()).thenReturn(values);

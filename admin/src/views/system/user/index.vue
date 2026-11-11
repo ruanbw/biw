@@ -2,7 +2,7 @@
 import { computed, h, reactive, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import { NButton, NTag } from 'naive-ui';
-import type { SelectOption } from 'naive-ui';
+import type { FormInst, FormItemRule, FormRules, SelectOption } from 'naive-ui';
 import dayjs from 'dayjs';
 import type { FlatResponseData } from '@sa/axios';
 import {
@@ -222,9 +222,72 @@ watch(editingData, value => {
   roleOptions.value = formModel.roleCodes.map(code => ({ label: code, value: code }));
 });
 
+// ---------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------
+/**
+ * Mirrors the server rules so a malformed value is refused before the request is sent, and the
+ * error points at the field instead of arriving as an English 400 from the API.
+ *
+ * The password ceiling is in BYTES, not characters: BCrypt reads 72 bytes and the API rejects
+ * anything longer, so 30 Chinese characters (90 bytes) must fail here rather than at the server.
+ */
+const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$/;
+const MIN_PASSWORD_CHARS = 8;
+const MAX_PASSWORD_CHARS = 64;
+const MAX_PASSWORD_BYTES = 72;
+
+const formRef = ref<FormInst | null>(null);
+const resetFormRef = ref<FormInst | null>(null);
+
+function passwordRules(): FormItemRule[] {
+  return [
+    {
+      required: true,
+      validator(_rule, value: string) {
+        if (!value) {
+          return new Error($t('page.systemUser.passwordRequired'));
+        }
+        if (value.length < MIN_PASSWORD_CHARS) {
+          return new Error($t('page.systemUser.passwordTooShort'));
+        }
+        if (value.length > MAX_PASSWORD_CHARS) {
+          return new Error($t('page.systemUser.passwordTooLong'));
+        }
+        if (new TextEncoder().encode(value).length > MAX_PASSWORD_BYTES) {
+          return new Error($t('page.systemUser.passwordTooManyBytes'));
+        }
+        return true;
+      },
+      trigger: ['input', 'blur']
+    }
+  ];
+}
+
+const rules = computed<FormRules>(() => ({
+  username: [
+    { required: true, message: $t('page.systemUser.usernameRequired'), trigger: ['input', 'blur'] },
+    { pattern: USERNAME_PATTERN, message: $t('page.systemUser.usernameInvalid'), trigger: ['input', 'blur'] }
+  ],
+  password: operateType.value === 'add' ? passwordRules() : []
+}));
+
+const resetRules: FormRules = {
+  newPassword: passwordRules()
+};
+
 const saving = ref(false);
 
 async function submitForm() {
+  const valid = await formRef.value
+    ?.validate()
+    .then(() => true)
+    .catch(() => false);
+
+  if (!valid) {
+    return;
+  }
+
   saving.value = true;
 
   const result =
@@ -300,6 +363,15 @@ function openResetPassword(id: number) {
 }
 
 async function submitResetPassword() {
+  const valid = await resetFormRef.value
+    ?.validate()
+    .then(() => true)
+    .catch(() => false);
+
+  if (!valid) {
+    return;
+  }
+
   const { error } = await fetchResetUserPassword(resetTargetId.value, { newPassword: resetPassword.value });
 
   if (!error) {
@@ -359,16 +431,22 @@ const drawerTitle = computed(() =>
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
-        <NForm label-placement="top">
-          <NFormItem :label="$t('page.systemUser.username')">
+        <NForm ref="formRef" label-placement="top" :rules="rules">
+          <NFormItem path="username" :label="$t('page.systemUser.username')">
             <NInput
               v-model:value="formModel.username"
               :disabled="operateType === 'edit'"
+              :maxlength="32"
               :placeholder="$t('page.systemUser.username')"
             />
           </NFormItem>
-          <NFormItem v-if="operateType === 'add'" :label="$t('page.systemUser.password')">
-            <NInput v-model:value="formModel.password" type="password" show-password-on="click" />
+          <NFormItem v-if="operateType === 'add'" path="password" :label="$t('page.systemUser.password')">
+            <NInput
+              v-model:value="formModel.password"
+              type="password"
+              show-password-on="click"
+              :maxlength="64"
+            />
           </NFormItem>
           <NFormItem :label="$t('page.systemUser.nickname')">
             <NInput v-model:value="formModel.nickname" :maxlength="64" />
@@ -399,9 +477,9 @@ const drawerTitle = computed(() =>
     </NDrawer>
 
     <NModal v-model:show="resetVisible" preset="card" class="w-400px" :title="$t('page.systemUser.resetPasswordTitle')">
-      <NForm label-placement="top">
-        <NFormItem :label="$t('page.systemUser.newPassword')">
-          <NInput v-model:value="resetPassword" type="password" show-password-on="click" />
+      <NForm ref="resetFormRef" label-placement="top" :rules="resetRules">
+        <NFormItem path="newPassword" :label="$t('page.systemUser.newPassword')">
+          <NInput v-model:value="resetPassword" type="password" show-password-on="click" :maxlength="64" />
         </NFormItem>
       </NForm>
       <template #footer>

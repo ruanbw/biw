@@ -5,6 +5,7 @@ import com.biw.entity.user.UserStatus;
 import com.biw.entity.user.dto.CreateUserRequest;
 import com.biw.entity.user.dto.UpdateUserRequest;
 import org.junit.jupiter.api.Test;
+import com.biw.support.TestDoubles;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
@@ -18,7 +19,7 @@ class UserConverterTest {
     @Test
     void fillsDefaultsForOmittedFields() {
         SysUser user = converter.toEntity(
-                new CreateUserRequest("bob", "raw-password", null, null, null), "bob", "hash");
+                new CreateUserRequest("bob", "raw-password", null, null, null), "bob", "hash", TestDoubles.NOW_OFFSET);
 
         assertThat(user.getUsername()).isEqualTo("bob");
         assertThat(user.getPasswordHash()).isEqualTo("hash");
@@ -35,7 +36,7 @@ class UserConverterTest {
     void takesTheUsernameFromTheParameterNotFromTheRequest() {
         // The service normalizes the username before mapping; a raw uppercase value must not win.
         SysUser user = converter.toEntity(
-                new CreateUserRequest("Bob", "raw-password", null, null, null), "bob", "hash");
+                new CreateUserRequest("Bob", "raw-password", null, null, null), "bob", "hash", TestDoubles.NOW_OFFSET);
 
         assertThat(user.getUsername()).isEqualTo("bob");
     }
@@ -45,7 +46,7 @@ class UserConverterTest {
         SysUser user = converter.toEntity(
                 new CreateUserRequest("bob", "raw-password", "  Bob  ", List.of("ADMIN"),
                         UserStatus.DISABLED),
-                "bob", "hash");
+                "bob", "hash", TestDoubles.NOW_OFFSET);
 
         assertThat(user.getNickname()).isEqualTo("Bob");
         // Role links are written by the service; the transient request list must not leak in.
@@ -58,11 +59,11 @@ class UserConverterTest {
         SysUser user = converter.toEntity(
                 new CreateUserRequest("bob", "raw-password", "Bob", List.of("USER"),
                         UserStatus.ENABLED),
-                "bob", "hash");
+                "bob", "hash", TestDoubles.NOW_OFFSET);
         user.setId(7L);
 
         converter.applyUpdate(new UpdateUserRequest("  Bobby  ", List.of("ADMIN"),
-                UserStatus.DISABLED), user);
+                UserStatus.DISABLED), user, TestDoubles.NOW_OFFSET);
 
         assertThat(user.getId()).isEqualTo(7L);
         assertThat(user.getUsername()).isEqualTo("bob");

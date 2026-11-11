@@ -8,6 +8,7 @@ import com.biw.mapper.SysRoleMapper;
 import com.biw.mapper.SysRolePermissionMapper;
 import com.biw.mapper.SysUserRoleMapper;
 import com.biw.service.RbacAuthorities;
+import com.biw.support.TestDoubles;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -24,7 +25,8 @@ class RoleServiceImplOptionsTest {
     private final SysRoleMapper mapper = mock(SysRoleMapper.class);
     private final RoleServiceImpl service = new RoleServiceImpl(
             mock(SysPermissionMapper.class), mock(SysRolePermissionMapper.class),
-            mock(SysUserRoleMapper.class), mock(RbacAuthorities.class));
+            mock(SysUserRoleMapper.class), mock(RbacAuthorities.class),
+            TestDoubles.anonymous(), TestDoubles.clock());
 
     @BeforeEach
     void injectMapper() {

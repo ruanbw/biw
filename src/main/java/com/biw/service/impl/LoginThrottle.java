@@ -1,11 +1,11 @@
 package com.biw.service.impl;
 
 import com.biw.common.exception.BizException;
+import com.biw.common.error.BizCode;
 import com.biw.common.web.ClientAddress;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.http.HttpStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -25,17 +25,9 @@ import java.util.List;
  * <p>
  * The account bucket only slows a guess at one account; the client bucket is what actually stops
  * password spraying, so it is set higher — one address may be a shared NAT carrying many people.
+ * Both numbers come from {@link LoginThrottlePolicy}.
  */
 final class LoginThrottle {
-
-    /** Failed logins per account before that account is refused for {@link #WINDOW}. */
-    static final int MAX_ACCOUNT_FAILURES = 10;
-
-    /** Failed logins per client address; higher, because one address may be a whole office. */
-    static final int MAX_CLIENT_FAILURES = 50;
-
-    /** How long a bucket lives. Fixed window, so it cannot be extended by the attacker. */
-    static final Duration WINDOW = Duration.ofMinutes(5);
 
     private static final String ACCOUNT_KEY_PREFIX = "biw:login:fail:account:";
     private static final String CLIENT_KEY_PREFIX = "biw:login:fail:client:";
@@ -56,9 +48,11 @@ final class LoginThrottle {
             """, Long.class);
 
     private final StringRedisTemplate redis;
+    private final LoginThrottlePolicy policy;
 
-    LoginThrottle(StringRedisTemplate redis) {
+    LoginThrottle(StringRedisTemplate redis, LoginThrottlePolicy policy) {
         this.redis = redis;
+        this.policy = policy;
     }
 
     /**
@@ -71,9 +65,10 @@ final class LoginThrottle {
         if (counts == null) {
             return;
         }
-        if (atLeast(counts.get(0), MAX_ACCOUNT_FAILURES) || atLeast(counts.get(1), MAX_CLIENT_FAILURES)) {
-            throw new BizException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many failed login attempts, try again in " + WINDOW.toMinutes() + " minutes");
+        if (atLeast(counts.get(0), policy.maxAccountFailures())
+                || atLeast(counts.get(1), policy.maxClientFailures())) {
+            throw new BizException(BizCode.LOGIN_THROTTLED,
+                    "Too many failed login attempts, try again in " + policy.window().toMinutes() + " minutes");
         }
     }
 
@@ -81,7 +76,7 @@ final class LoginThrottle {
     void record(String username, String clientAddress) {
         redis.execute(RECORD_FAILURE_SCRIPT,
                 List.of(accountKey(username), clientKey(clientAddress)),
-                String.valueOf(WINDOW.toSeconds()));
+                String.valueOf(policy.window().toSeconds()));
     }
 
     /**
@@ -91,6 +86,11 @@ final class LoginThrottle {
      */
     void clear(String username) {
         redis.delete(accountKey(username));
+    }
+
+    /** How long a refused caller has to wait; used in the client-facing message. */
+    Duration window() {
+        return policy.window();
     }
 
     private static int parse(String count) {

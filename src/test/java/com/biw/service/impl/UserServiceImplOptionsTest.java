@@ -10,6 +10,7 @@ import com.biw.mapper.SysRolePermissionMapper;
 import com.biw.mapper.SysUserMapper;
 import com.biw.mapper.SysUserRoleMapper;
 import com.biw.service.RbacAuthorities;
+import com.biw.support.TestDoubles;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -35,7 +36,9 @@ class UserServiceImplOptionsTest {
     private final UserServiceImpl service = new UserServiceImpl(
             mock(PasswordEncoder.class), mock(UserConverter.class), mock(StringRedisTemplate.class),
             mock(SysRoleMapper.class), mock(SysRolePermissionMapper.class),
-            mock(SysUserRoleMapper.class), mock(RbacAuthorities.class));
+            mock(SysUserRoleMapper.class), mock(RbacAuthorities.class),
+            TestDoubles.anonymous(), TestDoubles.sessionIssuer(), TestDoubles.sessionRevoker(),
+            TestDoubles.adminGuardLock(), TestDoubles.clock(), TestDoubles.loginThrottlePolicy());
 
     @BeforeEach
     void injectMapper() {
