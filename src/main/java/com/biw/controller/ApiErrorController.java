@@ -28,7 +28,9 @@ public class ApiErrorController implements ErrorController {
             httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
             code = httpStatus.value();
         }
+        // errorCode carries the HTTP status name here: there is no BizCode for a container-level
+        // failure, and the frontend keys its localization off errorCode, not off the message.
         return ResponseEntity.status(httpStatus)
-                .body(Result.fail(code, httpStatus.getReasonPhrase()));
+                .body(Result.fail(code, httpStatus.name(), httpStatus.getReasonPhrase()));
     }
 }

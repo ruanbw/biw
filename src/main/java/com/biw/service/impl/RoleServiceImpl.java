@@ -147,7 +147,7 @@ public class RoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impleme
         // current permissions, so a concurrent replacement must not land between that read and
         // this write.
         SysRole role = requireForUpdate(id);
-        RoleGuards.checkUpdate(role, request.status());
+        RoleGuards.checkUpdate(role, request.status(), currentUser.isAdmin());
         checkCanModifyRole(role);
 
         String name = null;

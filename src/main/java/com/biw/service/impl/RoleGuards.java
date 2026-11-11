@@ -15,9 +15,24 @@ final class RoleGuards {
     private RoleGuards() {
     }
 
-    /** A built-in role may be renamed, but disabling it would silently take its permissions away. */
-    static void checkUpdate(SysRole role, RoleStatus newStatus) {
-        if (isBuiltIn(role) && newStatus == RoleStatus.DISABLED) {
+    /**
+     * Only an administrator may touch a built-in role, and even then it cannot be disabled:
+     * disabling it would silently take its permissions away.
+     * <p>
+     * The administrator requirement is not decoration. {@code ADMIN} answers every check with the
+     * code-owned {@code '*'} wildcard, so its rows in {@code sys_role_permission} are empty and
+     * the "permissions you already hold" ceiling in {@link PrivilegeGuards} cannot see them — a
+     * {@code role:write} holder would otherwise be free to rename a role it cannot describe.
+     */
+    static void checkUpdate(SysRole role, RoleStatus newStatus, boolean callerIsAdmin) {
+        if (!isBuiltIn(role)) {
+            return;
+        }
+        if (!callerIsAdmin) {
+            throw new BizException(BizCode.BUILTIN_ROLE_IMMUTABLE,
+                    "Only an administrator can change a built-in role");
+        }
+        if (newStatus == RoleStatus.DISABLED) {
             throw new BizException(BizCode.BUILTIN_ROLE_IMMUTABLE, "Built-in roles cannot be disabled");
         }
     }

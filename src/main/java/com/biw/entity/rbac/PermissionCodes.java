@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Every permission the code checks. Annotations reference these constants, and the seeded
  * rows in {@code sql/init.sql} must match them; {@code PermissionCodesTest} fails when a
- * code is missing from the migrations, so an endpoint cannot silently end up with a
+ * code is missing from {@code sql/init.sql}, so an endpoint cannot silently end up with a
  * permission no role can ever be granted.
  * <p>
  * Role names are deliberately absent from annotations: a role is a bundle of these codes.

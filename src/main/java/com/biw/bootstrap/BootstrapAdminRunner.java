@@ -92,7 +92,7 @@ public class BootstrapAdminRunner implements ApplicationRunner {
                 Wrappers.<SysRole>lambdaQuery().eq(SysRole::getCode, RoleCodes.ADMIN));
         if (adminRole == null) {
             throw new IllegalStateException("Built-in role " + RoleCodes.ADMIN
-                    + " is missing; the V2 migration did not run");
+                    + " is missing; sql/init.sql did not run");
         }
 
         OffsetDateTime now = OffsetDateTime.now();

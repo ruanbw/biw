@@ -37,17 +37,32 @@ class RoleGuardsTest {
 
     @Test
     void builtInRoleCannotBeDisabled() {
-        assertThatThrownBy(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), RoleStatus.DISABLED))
+        assertThatThrownBy(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), RoleStatus.DISABLED, true))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("Built-in roles cannot be disabled")
                 .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
     }
 
     @Test
-    void builtInRoleMayBeRenamed() {
-        assertThatCode(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), null))
+    void builtInRoleMayBeRenamedByAnAdministrator() {
+        assertThatCode(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), null, true))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), RoleStatus.ENABLED))
+        assertThatCode(() -> RoleGuards.checkUpdate(role(RoleCodes.USER, true), RoleStatus.ENABLED, true))
+                .doesNotThrowAnyException();
+    }
+
+    /**
+     * ADMIN's permissions are the code-owned wildcard, so {@code sys_role_permission} has no rows
+     * for it and the "permissions you hold" ceiling cannot see them. Without this rule a
+     * delegated role manager could relabel the superuser role.
+     */
+    @Test
+    void builtInRoleCannotBeTouchedByADelegatedRoleManager() {
+        assertThatThrownBy(() -> RoleGuards.checkUpdate(role(RoleCodes.ADMIN, true), null, false))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("Only an administrator can change a built-in role")
+                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThatCode(() -> RoleGuards.checkUpdate(role("AUDITOR", false), null, false))
                 .doesNotThrowAnyException();
     }
 
