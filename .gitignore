@@ -97,3 +97,7 @@ logs/
 *.log.gz
 *.pid
 *.hprof
+.alma-snapshots
+
+# Local review notes — kept out of the repository on purpose
+CODE_REVIEW.md
