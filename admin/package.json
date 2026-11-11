@@ -81,7 +81,7 @@
     "consola": "3.4.2",
     "eslint": "^10.12.0",
     "kolorist": "1.8.0",
-    "sass": "1.105.1",
+    "sass": "1.108.1",
     "tsx": "^4.23.15",
     "typescript": "catalog:",
     "unocss": "^66.10.5",
