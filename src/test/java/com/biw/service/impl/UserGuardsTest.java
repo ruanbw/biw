@@ -1,8 +1,10 @@
 package com.biw.service.impl;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -34,20 +36,28 @@ class UserGuardsTest {
     void adminCannotRemoveTheirOwnAdminPower() {
         assertThatThrownBy(() -> UserGuards.checkUpdate(ME, ME, true, false, true, false, () -> 2))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("cannot change your own role");
+                .hasMessageContaining("cannot change your own role")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.SELF_LOCKOUT.code()));
         assertThatThrownBy(() -> UserGuards.checkUpdate(ME, ME, true, false, false, true, () -> 2))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("cannot change your own role");
+                .hasMessageContaining("cannot change your own role")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.SELF_LOCKOUT.code()));
     }
 
     @Test
     void lastActiveAdminCannotLoseAdminPowerButAnotherOneCan() {
         assertThatThrownBy(() -> UserGuards.checkUpdate(OTHER, ME, true, false, true, false, () -> 1))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("At least one active administrator");
+                .hasMessageContaining("At least one active administrator")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.LAST_ADMIN.code()));
         assertThatThrownBy(() -> UserGuards.checkUpdate(OTHER, ME, true, false, false, true, () -> 1))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("At least one active administrator");
+                .hasMessageContaining("At least one active administrator")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.LAST_ADMIN.code()));
         assertThatCode(() -> UserGuards.checkUpdate(OTHER, ME, true, false, true, false, () -> 2))
                 .doesNotThrowAnyException();
     }
@@ -72,17 +82,23 @@ class UserGuardsTest {
             throw new AssertionError("admin count must not be read");
         }))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("cannot delete yourself");
+                .hasMessageContaining("cannot delete yourself")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.SELF_DELETE.code()));
     }
 
     @Test
     void deletingAdminsMustLeaveOneActive() {
         assertThatThrownBy(() -> UserGuards.checkDelete(false, 1, () -> 1))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("At least one active administrator");
+                .hasMessageContaining("At least one active administrator")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.LAST_ADMIN.code()));
         assertThatThrownBy(() -> UserGuards.checkDelete(false, 2, () -> 2))
                 .isInstanceOf(BizException.class)
-                .hasMessageContaining("At least one active administrator");
+                .hasMessageContaining("At least one active administrator")
+                .satisfies(ex -> assertThat(((BizException) ex).getErrorCode())
+                        .isEqualTo(BizCode.LAST_ADMIN.code()));
         assertThatCode(() -> UserGuards.checkDelete(false, 2, () -> 3))
                 .doesNotThrowAnyException();
     }

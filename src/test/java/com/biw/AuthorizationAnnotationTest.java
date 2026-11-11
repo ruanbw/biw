@@ -68,6 +68,12 @@ class AuthorizationAnnotationTest {
                 if (!pattern.startsWith("/api/")) {
                     continue;
                 }
+                // A handler declared with a bare @RequestMapping carries no method condition, so
+                // the loop below would run zero times and the endpoint would never be checked —
+                // the exact hole this test exists to close. Demand an explicit method.
+                assertThat(mapping.getMethodsCondition().getMethods())
+                        .as("declare an HTTP method for " + pattern)
+                        .isNotEmpty();
                 for (RequestMethod method : mapping.getMethodsCondition().getMethods()) {
                     String key = method.name() + " " + pattern;
                     SaCheckPermission permission = handler.getMethodAnnotation(SaCheckPermission.class);

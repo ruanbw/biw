@@ -1,5 +1,6 @@
 package com.biw.service.impl;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
 import com.biw.entity.rbac.PermissionCodes;
 import com.biw.entity.rbac.RoleCodes;
@@ -23,7 +24,10 @@ class PrivilegeGuardsTest {
         assertThatThrownBy(() -> PrivilegeGuards.checkCanGrantAdmin(false, List.of(RoleCodes.ADMIN)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("Only an administrator can grant the ADMIN role")
-                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+                .satisfies(ex -> {
+                    assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(((BizException) ex).getErrorCode()).isEqualTo(BizCode.ADMIN_REQUIRED.code());
+                });
     }
 
     @Test
@@ -37,7 +41,10 @@ class PrivilegeGuardsTest {
         assertThatThrownBy(() -> PrivilegeGuards.checkCanModifyAdmin(false, true))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("Only an administrator can modify an administrator")
-                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+                .satisfies(ex -> {
+                    assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(((BizException) ex).getErrorCode()).isEqualTo(BizCode.ADMIN_REQUIRED.code());
+                });
         assertThatCode(() -> PrivilegeGuards.checkCanModifyAdmin(false, false))
                 .doesNotThrowAnyException();
     }
@@ -49,7 +56,11 @@ class PrivilegeGuardsTest {
                 List.of(PermissionCodes.USER_READ, PermissionCodes.USER_WRITE)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining(PermissionCodes.USER_WRITE)
-                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+                .satisfies(ex -> {
+                    assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(((BizException) ex).getErrorCode())
+                            .isEqualTo(BizCode.CANNOT_MODIFY_EXCEEDING.code());
+                });
     }
 
     @Test
@@ -66,7 +77,11 @@ class PrivilegeGuardsTest {
                 List.of(PermissionCodes.USER_READ, PermissionCodes.USER_WRITE)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining(PermissionCodes.USER_WRITE)
-                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+                .satisfies(ex -> {
+                    assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(((BizException) ex).getErrorCode())
+                            .isEqualTo(BizCode.CANNOT_GRANT_EXCEEDING.code());
+                });
     }
 
     @Test
@@ -83,7 +98,11 @@ class PrivilegeGuardsTest {
                 List.of(PermissionCodes.ROLE_WRITE, PermissionCodes.USER_WRITE)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining(PermissionCodes.USER_WRITE)
-                .satisfies(ex -> assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
+                .satisfies(ex -> {
+                    assertThat(((BizException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(((BizException) ex).getErrorCode())
+                            .isEqualTo(BizCode.CANNOT_MODIFY_EXCEEDING.code());
+                });
     }
 
     @Test

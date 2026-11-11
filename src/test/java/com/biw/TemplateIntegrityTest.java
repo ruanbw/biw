@@ -1,6 +1,7 @@
 package com.biw;
 
 import com.biw.entity.rbac.PermissionCodes;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -31,8 +32,10 @@ class TemplateIntegrityTest {
     @Test
     void everyRoutePermissionExistsInTheBackendCatalog() throws IOException {
         if (!Files.exists(ROUTES)) {
-            // A backend-only checkout: nothing to compare, and failing here would be noise.
-            return;
+            // A backend-only checkout has nothing to compare. Ask JUnit to report it as skipped:
+            // returning silently made the check disappear from the report, and a check nobody can
+            // see is a check that is already off.
+            Assumptions.abort("admin/ is not present in this checkout; cross-language check skipped");
         }
 
         List<String> declared = new ArrayList<>();

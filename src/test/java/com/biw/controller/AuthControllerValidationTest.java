@@ -1,10 +1,8 @@
 package com.biw.controller;
 
+import com.biw.common.error.BizCode;
 import com.biw.common.exception.BizException;
-import com.biw.common.exception.GlobalExceptionHandler;
-import com.biw.entity.user.SysUser;
 import com.biw.entity.user.dto.LoginRequest;
-import com.biw.service.RbacAuthorities;
 import com.biw.support.TestDoubles;
 import com.biw.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,10 +28,10 @@ class AuthControllerValidationTest {
     @BeforeEach
     void setUp() {
         UserService userService = mock(UserService.class);
-        RbacAuthorities rbacAuthorities = mock(RbacAuthorities.class);
+        // The real service throws this code; stubbing the bare status would let a regression that
+        // drops the machine-readable code pass unnoticed.
         when(userService.login(any(LoginRequest.class)))
-                .thenThrow(new BizException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
-        when(userService.me()).thenReturn(new SysUser());
+                .thenThrow(new BizException(BizCode.BAD_CREDENTIALS));
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new AuthController(userService, TestDoubles.anonymous(), TestDoubles.sessionRevoker()))
@@ -93,6 +91,7 @@ class AuthControllerValidationTest {
                         .content("{\"username\":\"admin\",\"password\":\"wrong-password\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401))
-                .andExpect(jsonPath("$.message").value("Invalid username or password"));
+                .andExpect(jsonPath("$.errorCode").value(BizCode.BAD_CREDENTIALS.code()))
+                .andExpect(jsonPath("$.message").value(BizCode.BAD_CREDENTIALS.message()));
     }
 }
