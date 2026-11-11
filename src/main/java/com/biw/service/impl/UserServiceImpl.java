@@ -101,10 +101,9 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         checkPasswordBytes(request.password());
         String username = normalize(request.username());
         String clientAddress = ClientAddress.current();
-        // Counts the attempt before the password is checked, atomically against both buckets: a
-        // refusal is audited by GlobalExceptionHandler from the code carried here, and costs no
-        // BCrypt call.
-        loginThrottle.attempt(username, clientAddress);
+        // Refuses early — before the ~200ms BCrypt comparison — when either bucket is at its
+        // ceiling. A refusal is audited by GlobalExceptionHandler from the code carried here.
+        loginThrottle.check(username, clientAddress);
 
         SysUser user = lambdaQuery().eq(SysUser::getUsername, username).one();
         boolean enabled = user != null && user.getStatus() == UserStatus.ENABLED;
@@ -114,16 +113,16 @@ public class UserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
         boolean passwordMatches = passwordEncoder.matches(request.password(),
                 enabled ? user.getPasswordHash() : dummyPasswordHash);
         if (!enabled || !passwordMatches) {
-            // attempt(...) already counted this failure; nothing else to write.
+            // Only a failure is counted, so there is nothing to give back on success.
             // The audit event names the outcome; the reason (unknown / disabled / wrong password)
             // is deliberately not part of the response, so it must not be inferred from timing.
+            loginThrottle.onFailure(username, clientAddress);
             throw new BizException(BizCode.BAD_CREDENTIALS);
         }
 
-        // Clears the account bucket and refunds the client bucket: the attempt was reserved but
-        // it was not a failure. The rest of the client bucket stays, so a caller cannot reset a
-        // shared address's counter by logging into an account it controls.
-        loginThrottle.onSuccess(username, clientAddress);
+        // Clears the account bucket; the client bucket keeps the failures of everyone else behind
+        // the same address, so a caller cannot reset it by logging in.
+        loginThrottle.onSuccess(username);
         SessionIssuer.IssuedToken token = sessionIssuer.login(user.getId());
         return new LoginVO(token.tokenName(), token.tokenValue(), token.timeoutSeconds(), withRoleCodes(user));
     }
