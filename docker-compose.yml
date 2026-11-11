@@ -7,9 +7,12 @@
 #
 # Credentials match src/main/resources/application-dev.yml defaults.
 # Ports are bound to 127.0.0.1 on purpose: nothing is exposed to the LAN.
+#
+# The images are pinned by digest: a tag is a moving reference, and this is the only dependency in
+# the repository that can change without a commit here. Dependabot bumps both together.
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     container_name: biw-postgres
     environment:
       POSTGRES_DB: biw
@@ -43,7 +46,7 @@ services:
       - biw-net
 
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:47b08295737773de3b711fb86f13ae802f5074e96a9a2d29f5f80164ac08c046
     container_name: biw-redis
     # Sa-Token keeps every session in this instance, so it has to require a password even on
     # localhost: any process on the machine could otherwise export every live token.
