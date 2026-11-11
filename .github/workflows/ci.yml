@@ -38,6 +38,72 @@ jobs:
           name: surefire
           path: target/surefire-reports/
 
+  # `sql/init.sql` is the only schema and nothing in the unit suite executes it: a missing comma
+  # or a wrong column name would pass every test and only appear on someone's first
+  # `docker compose up`. This job applies both scripts to a real PostgreSQL, twice (they claim to
+  # be re-runnable), and asserts the grants the application depends on.
+  schema:
+    name: schema (init.sql against PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: biw
+          POSTGRES_USER: biw
+          # Throwaway instance, reachable only from this job.
+          POSTGRES_PASSWORD: ci-not-a-secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U biw -d biw"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGUSER: biw
+      PGPASSWORD: ci-not-a-secret
+      POSTGRES_USER: biw
+      POSTGRES_DB: biw
+      APP_DB_PASSWORD: app-password
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Apply the schema and the application role
+        run: |
+          psql -d biw -v ON_ERROR_STOP=1 -q -f sql/init.sql
+          bash sql/02-app-role.sh
+      - name: Both scripts are re-runnable
+        run: |
+          psql -d biw -v ON_ERROR_STOP=1 -q -f sql/init.sql
+          bash sql/02-app-role.sh
+      - name: The schema and the least-privilege grants are what the code expects
+        run: |
+          tables=$(psql -d biw -tAc "select count(*) from information_schema.tables where table_schema = 'public'")
+          if [ "$tables" != "6" ]; then
+            echo "expected 6 tables in public, found $tables"
+            exit 1
+          fi
+
+          # The application role writes audit rows ...
+          PGPASSWORD=app-password psql -h localhost -U biw_app -d biw -q \
+            -c "insert into sys_audit_log (action, outcome) values ('ci.check', 'SUCCESS')"
+
+          # ... and cannot rewrite or delete them.
+          for statement in "update sys_audit_log set action = 'x'" "delete from sys_audit_log"; do
+            if PGPASSWORD=app-password psql -h localhost -U biw_app -d biw -q -c "$statement" 2>/dev/null; then
+              echo "the application role must not be able to run: $statement"
+              exit 1
+            fi
+          done
+
+          # The username shape is enforced by the database too, not only by the API.
+          if psql -d biw -q -c "insert into sys_user (username, password_hash) values ('Not Valid!', 'x')" 2>/dev/null; then
+            echo "the username CHECK constraint is missing"
+            exit 1
+          fi
+
   frontend:
     name: admin (lint + typecheck + build)
     runs-on: ubuntu-latest
