@@ -30,6 +30,15 @@ SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
 postgres volume 里没有这个角色**，需要 `docker compose down -v && docker compose up -d` 重建
 （数据会丢，本项目的 schema 本来就是"改文件 + 重建"）。
 
+**审计表是证据，不是日志。** `biw_app` 对 `sys_audit_log` 只有 `SELECT` / `INSERT`：写进去的记录，
+应用自己（以及任何借应用执行的 SQL 注入）改不了也删不了。代价是保留期清理不能交给应用，
+由运维夜间执行一次：
+
+```bash
+docker compose exec -T postgres \
+  psql -U biw -d biw -v retention_days=365 -f - < sql/03-audit-retention.sql
+```
+
 **表结构只有一个文件：`sql/init.sql`。** 没有迁移链——这是基座项目，没有需要保留的部署历史。
 改表就改这个文件，然后 `docker compose down -v && docker compose up -d`。
 
@@ -52,7 +61,8 @@ pnpm dev        # http://localhost:9527
 开发期通过 Vite 代理转发到 `http://localhost:8080`，不需要给后端加 CORS 配置。
 后端换了端口就改 `admin/.env.test` 里的 `VITE_SERVICE_BASE_URL`。
 
-前端表单在提交前就校验用户名、密码长度与字节数，与后端规则一致，非法输入不会发出请求。
+创建/重置密码的表单在提交前就校验长度与字节数，与后端规则一致，非法输入不会发出请求。
+登录表单只校验非空——登录不应该套用"设置密码"的策略，否则一个合法但很长的口令会被前端挡住。
 
 ## 测试
 

@@ -17,7 +17,10 @@
 | 可测性 | `CurrentUser` / `Clock` / `SessionRevoker` 注入 | `common/security/` |
 | 管理端 | 用户/角色/权限三个模块 | `admin/src/views/system/` |
 
-**模板不提供**：自助改密、MFA、会话数上限、限流阈值、乐观锁、权限缓存、审计落库。这些是策略，派生项目按需实现，接入点见文末。
+**模板给出可用的默认值，但数值是策略，不是规则**：登录限流阈值、会话数上限、空闲超时、审计落库
+都已实现并有默认配置（见第 6 节），派生项目要按自己的用户规模复核数值。
+
+**模板不提供**：自助改密、MFA、乐观锁、权限缓存。这些是功能，不是配置项，接入点见第 6 节。
 
 ---
 
@@ -80,7 +83,7 @@ PostgreSQL 的 `ALTER TYPE ... ADD VALUE` 不能在同一个事务里被使用�
 | 2 | 改名：`grep -rl 'com\.biw' src admin \| xargs sed -i '' 's/com\.biw/com\.acme/g'`，再改 `pom.xml` 的 groupId/artifactId、`spring.application.name`、Redis key 前缀 `biw:`、审计 logger 名 | `grep -rn 'com\.biw\|"biw:' .` 无输出 |
 | 3 | 改 `docker-compose.yml` 的 `POSTGRES_DB` / `POSTGRES_USER` / `APP_DB_USERNAME` / 卷名，同步改 `sql/init.sql` 的注释 | `docker compose up -d` 后库存在，`biw_app` 能连上 |
 | 4 | 确认第一个管理员的来源（见下节） | 空库启动时按环境变量创建 |
-| 5 | 启动一次 | 5 张表存在，用上一步的账号能登录 |
+| 5 | 启动一次 | 6 张表存在（`sys_user`、`sys_role`、`sys_permission`、`sys_user_role`、`sys_role_permission`、`sys_audit_log`），用上一步的账号能登录 |
 | 6 | 前端品牌：`VITE_APP_TITLE`、`locales/langs/*.ts`、`index.html` | 登录页无 `biw` 字样 |
 | 7 | 启用 CI：`.github/workflows/ci.yml` 已就绪 | PR 上 `backend` 与 `frontend` 两个 job 绿 |
 | 8 | 加一个 demo 模块（按第 3 节） | 菜单可见、CRUD 可用、`PermissionCodesTest` 绿 |
@@ -110,10 +113,11 @@ BIW_BOOTSTRAP_ADMIN_USERNAME=admin BIW_BOOTSTRAP_ADMIN_PASSWORD='<至少 8 位>'
 
 | 想做的事 | 接在哪 |
 |---|---|
-| 限流阈值 | `biw.security.login-throttle.*` |
-| 会话数上限 | `application.yml` 的 `sa-token.max-login-count` |
+| 限流阈值 | `biw.security.login-throttle.*`（默认 10 次/账号、50 次/客户端、5 分钟窗口） |
+| 会话数上限 | `application.yml` 的 `sa-token.max-login-count`（默认 3，第 4 次登录踢掉最旧的） |
+| 会话时长 | `SA_TOKEN_TIMEOUT`（绝对，默认 8 小时）与 `SA_TOKEN_ACTIVE_TIMEOUT`（空闲，默认 30 分钟） |
 | 可信代理 / IP 来源 | `common/web/ClientAddress` + `server.forward-headers-strategy` |
-| 审计落库 | `biw.audit.jdbc.enabled=true`（表已内置，prod 默认开）+ `retention` 控制保留期 |
+| 审计落库 | `biw.audit.jdbc.enabled=true`（表已内置，prod 默认开）。保留期由运维脚本 `sql/03-audit-retention.sql` 夜间执行——应用角色对 `sys_audit_log` 只有 SELECT/INSERT，改不了也删不了自己写的证据 |
 | 数据库最小权限 | `sql/02-app-role.sh` + `DB_USERNAME` / `DB_PASSWORD`，应用不用 schema owner 连库 |
 | 权限缓存 | 替换 `RbacAuthorities`（已是 Service，无静态调用） |
 | 乐观锁 | 给业务表加 `version` 列 + `If-Match` 请求头 |
