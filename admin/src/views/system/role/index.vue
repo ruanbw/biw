@@ -2,7 +2,7 @@
 import { computed, h, reactive, ref, watch } from 'vue';
 import type { Ref } from 'vue';
 import { NButton, NTag } from 'naive-ui';
-import type { SelectOption } from 'naive-ui';
+import type { FormInst, FormRules, SelectOption } from 'naive-ui';
 import dayjs from 'dayjs';
 import type { FlatResponseData } from '@sa/axios';
 import {
@@ -116,7 +116,7 @@ const { columns, columnChecks, data, loading, pagination, getData, mobilePaginat
   }
 });
 
-const { drawerVisible, openDrawer, closeDrawer, operateType, handleAdd, editingData, handleEdit, onDeleted } =
+const { drawerVisible, closeDrawer, operateType, handleAdd, editingData, handleEdit, onDeleted } =
   useTableOperate(data as Ref<Role[]>, 'id', getData);
 
 function search() {
@@ -173,8 +173,44 @@ watch(editingData, value => {
 });
 
 const saving = ref(false);
+const formRef = ref<FormInst | null>(null);
+
+/** Mirrors the backend `CreateRoleRequest`/`UpdateRoleRequest` constraints. */
+const ROLE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/;
+const MAX_ROLE_NAME_LENGTH = 64;
+const MAX_ROLE_DESCRIPTION_LENGTH = 255;
+
+/**
+ * `code` is immutable once the role exists (the input is disabled in edit mode), so it is only
+ * validated on create: a disabled field would otherwise block a form it cannot fix.
+ */
+const rules = computed<FormRules>(() => ({
+  code:
+    operateType.value === 'add'
+      ? [
+          { required: true, message: $t('page.systemRole.codeRequired'), trigger: ['input', 'blur'] },
+          { pattern: ROLE_CODE_PATTERN, message: $t('page.systemRole.codeInvalid'), trigger: ['input', 'blur'] }
+        ]
+      : [],
+  name: [
+    { required: true, message: $t('page.systemRole.nameRequired'), trigger: ['input', 'blur'] },
+    { max: MAX_ROLE_NAME_LENGTH, message: $t('page.systemRole.nameTooLong'), trigger: ['input', 'blur'] }
+  ],
+  description: [
+    { max: MAX_ROLE_DESCRIPTION_LENGTH, message: $t('page.systemRole.descriptionTooLong'), trigger: ['input', 'blur'] }
+  ]
+}));
 
 async function submitForm() {
+  const valid = await formRef.value
+    ?.validate()
+    .then(() => true)
+    .catch(() => false);
+
+  if (!valid) {
+    return;
+  }
+
   saving.value = true;
 
   const result =
@@ -232,10 +268,17 @@ const permissionOptions = computed<SelectOption[]>(() =>
   }))
 );
 
+/**
+ * Load the role's current permissions first and only then open the dialog.
+ *
+ * Opening it up front would leave an empty selection on screen when the request fails, and
+ * "confirm" would submit `permissionCodes: []` — which the API treats as "revoke everything".
+ */
 async function openPermissions(id: number) {
   permissionTargetId.value = id;
   permissionCodes.value = [];
-  permissionVisible.value = true;
+  // Reset before the request so a failure cannot inherit the previous role's state.
+  permissionTargetBuiltIn.value = false;
   permissionLoading.value = true;
 
   const [{ data: detail, error }, { data: catalog }] = await Promise.all([
@@ -257,6 +300,8 @@ async function openPermissions(id: number) {
   if (catalog) {
     allPermissions.value = catalog;
   }
+
+  permissionVisible.value = true;
 }
 
 async function submitPermissions() {
@@ -286,7 +331,14 @@ async function submitPermissions() {
           <NButton type="primary" @click="search">{{ $t('common.search') }}</NButton>
           <NButton @click="resetSearch">{{ $t('common.reset') }}</NButton>
         </NSpace>
-        <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" @add="openCreate" @refresh="getData">
+        <!-- 后端无角色批量删除接口：禁用"批量删除"按钮，不新增接口调用。 -->
+        <TableHeaderOperation
+          v-model:columns="columnChecks"
+          :disabled-delete="true"
+          :loading="loading"
+          @add="openCreate"
+          @refresh="getData"
+        >
           <template v-if="!canWrite" #default>
             <span />
           </template>
@@ -311,8 +363,8 @@ async function submitPermissions() {
         :title="operateType === 'add' ? $t('page.systemRole.createTitle') : $t('page.systemRole.editTitle')"
         closable
       >
-        <NForm label-placement="top" @submit.prevent="submitForm">
-          <NFormItem :label="$t('page.systemRole.code')">
+        <NForm ref="formRef" label-placement="top" :model="formModel" :rules="rules" @submit.prevent="submitForm">
+          <NFormItem path="code" :label="$t('page.systemRole.code')">
             <NInput
               v-model:value="formModel.code"
               :disabled="operateType === 'edit'"
@@ -321,10 +373,10 @@ async function submitPermissions() {
             />
           </NFormItem>
           <p v-if="operateType === 'add'" class="mb-16px text-12px text-#888">{{ $t('page.systemRole.codeTip') }}</p>
-          <NFormItem :label="$t('page.systemRole.name')">
+          <NFormItem path="name" :label="$t('page.systemRole.name')">
             <NInput v-model:value="formModel.name" :maxlength="64" />
           </NFormItem>
-          <NFormItem :label="$t('page.systemRole.description')">
+          <NFormItem path="description" :label="$t('page.systemRole.description')">
             <NInput v-model:value="formModel.description" type="textarea" :maxlength="255" :rows="3" />
           </NFormItem>
           <NFormItem v-if="operateType === 'edit'" :label="$t('page.systemRole.status')">
@@ -367,7 +419,7 @@ async function submitPermissions() {
       <template #footer>
         <NSpace justify="end">
           <NButton @click="permissionVisible = false">{{ $t('common.cancel') }}</NButton>
-          <NButton type="primary" :disabled="permissionTargetBuiltIn" @click="submitPermissions">
+          <NButton type="primary" :disabled="permissionTargetBuiltIn || permissionLoading" @click="submitPermissions">
             {{ $t('common.confirm') }}
           </NButton>
         </NSpace>
