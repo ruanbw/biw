@@ -1,5 +1,5 @@
 import type { AxiosResponse } from 'axios';
-import { BACKEND_ERROR_CODE, createFlatRequest } from '@sa/axios';
+import { createFlatRequest } from '@sa/axios';
 import { getServiceBaseURL } from '@/utils/service';
 import { useAuthStore } from '@/store/modules/auth';
 import { getTokenHeader, showErrorMsg } from './shared';
@@ -17,6 +17,26 @@ const { baseURL } = getServiceBaseURL(import.meta.env, isHttpProxy);
  * origin.
  */
 const apiBaseURL = `${baseURL}/api`;
+
+/**
+ * Drop the local session after a 401 — but only when there was a session to drop.
+ *
+ * There is no refresh token to spend, so a 401 on an authenticated request means the session is
+ * gone: clear the token, the user info and the cached tabs, then let the guard route to login.
+ * A 401 with no token is a rejected login attempt; that needs the backend message on screen, not
+ * a redirect away from the page the user is typing on.
+ *
+ * @returns whether a session was actually cleared
+ */
+async function handleUnauthorized(): Promise<boolean> {
+  if (!Object.keys(getTokenHeader()).length) {
+    return false;
+  }
+
+  await useAuthStore().resetStore();
+
+  return true;
+}
 
 /**
  * The single HTTP client for the biw backend.
@@ -47,31 +67,29 @@ export const request = createFlatRequest(
       return response.data.code === Number(import.meta.env.VITE_SERVICE_SUCCESS_CODE);
     },
     async onBackendFail(response) {
-      // 401 means the token is missing, expired, or the session was kicked out. There is no
-      // refresh token to spend, so drop the local session and let the guard route to login.
+      // Only reached for a 2xx answer carrying a failing business code. That is not how this
+      // backend reports failures - it answers real HTTP status codes - so a 401 realistically
+      // arrives in `onError`. Keep both paths covered.
       if (response.status === 401) {
-        const authStore = useAuthStore();
-
-        authStore.resetStore();
+        await handleUnauthorized();
       }
 
       // Returning null hands the response to `onError`, which shows the backend message and
       // rejects, so the caller's `error` is set.
       return null;
     },
-    onError(error) {
+    async onError(error) {
       const status = error.response?.status;
 
-      // Already handled by `onBackendFail`: the redirect says more than a toast would.
-      if (status === 401) {
+      // Token expired or kicked out: clear the session and let the guard redirect, which says
+      // more than a toast would. A 401 without a token is a failed login, handled below.
+      if (status === 401 && (await handleUnauthorized())) {
         return;
       }
 
-      let message = error.message;
-
-      if (error.code === BACKEND_ERROR_CODE) {
-        message = error.response?.data?.message || message;
-      }
+      // Real 4xx/5xx answers carry the backend's own `Result`, whose `message` is written for
+      // the user; `error.message` would only repeat the HTTP status text.
+      const message = error.response?.data?.message || error.message;
 
       showErrorMsg(request.state, message);
     }

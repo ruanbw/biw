@@ -557,6 +557,11 @@ declare namespace App {
           createTitle: string;
           editTitle: string;
           codeTip: string;
+          codeRequired: string;
+          codeInvalid: string;
+          nameRequired: string;
+          nameTooLong: string;
+          descriptionTooLong: string;
           permissionTitle: string;
           permissionTip: string;
           permissionEmpty: string;
@@ -658,6 +663,8 @@ declare namespace App {
     type Response<T = unknown> = {
       /** The backend service response code, 0 on success */
       code: number;
+      /** Stable machine-readable error identifier from the backend `Result`; null on success */
+      errorCode: string | null;
       /** The backend service response message */
       message: string;
       /** The backend service response data */
