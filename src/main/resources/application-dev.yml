@@ -2,8 +2,9 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/biw
-    username: ${DB_USERNAME:biw}
-    password: ${DB_PASSWORD:devpass}
+    # The DML-only role from sql/02-app-role.sh — not the image's superuser.
+    username: ${DB_USERNAME:biw_app}
+    password: ${DB_PASSWORD:apppass}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: biw-hikari

@@ -2,8 +2,8 @@
 spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:biw_test}
-    username: ${DB_USERNAME:biw}
-    password: ${DB_PASSWORD:devpass}
+    username: ${DB_USERNAME:biw_app}
+    password: ${DB_PASSWORD:apppass}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: biw-hikari

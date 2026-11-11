@@ -5,8 +5,8 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/biw
-    username: biw
-    password: devpass
+    username: biw_app
+    password: apppass
   data:
     redis:
       host: localhost

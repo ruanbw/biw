@@ -15,6 +15,10 @@ services:
       POSTGRES_DB: biw
       POSTGRES_USER: biw
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+      # The application connects as this role (created by 02-app-role.sh), not as the image's
+      # superuser. Keep it in sync with DB_USERNAME / DB_PASSWORD on the application side.
+      APP_DB_USERNAME: ${DB_USERNAME:-biw_app}
+      APP_DB_PASSWORD: ${DB_PASSWORD:-apppass}
       TZ: Asia/Shanghai
       PGTZ: Asia/Shanghai
     ports:
@@ -26,6 +30,8 @@ services:
       # The schema, applied once when the volume is empty. This base project has one schema file,
       # not a migration chain: change sql/init.sql and rebuild with `down -v && up -d`.
       - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Runs after the schema: grants the application the DML-only role it connects as.
+      - ./sql/02-app-role.sh:/docker-entrypoint-initdb.d/02-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U biw -d biw"]
       interval: 10s

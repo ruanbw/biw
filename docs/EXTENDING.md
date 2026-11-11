@@ -78,7 +78,7 @@ PostgreSQL 的 `ALTER TYPE ... ADD VALUE` 不能在同一个事务里被使用�
 |---|---|---|
 | 1 | `git clone <tpl> acme && cd acme && rm -rf .git && git init` | `git log` 只有自己的提交 |
 | 2 | 改名：`grep -rl 'com\.biw' src admin \| xargs sed -i '' 's/com\.biw/com\.acme/g'`，再改 `pom.xml` 的 groupId/artifactId、`spring.application.name`、Redis key 前缀 `biw:`、审计 logger 名 | `grep -rn 'com\.biw\|"biw:' .` 无输出 |
-| 3 | 改 `docker-compose.yml` 的 `POSTGRES_DB` / `POSTGRES_USER` / 卷名，同步改 `sql/init.sql` 的注释 | `docker compose up -d` 后库存在 |
+| 3 | 改 `docker-compose.yml` 的 `POSTGRES_DB` / `POSTGRES_USER` / `APP_DB_USERNAME` / 卷名，同步改 `sql/init.sql` 的注释 | `docker compose up -d` 后库存在，`biw_app` 能连上 |
 | 4 | 确认第一个管理员的来源（见下节） | 空库启动时按环境变量创建 |
 | 5 | 启动一次 | 5 张表存在，用上一步的账号能登录 |
 | 6 | 前端品牌：`VITE_APP_TITLE`、`locales/langs/*.ts`、`index.html` | 登录页无 `biw` 字样 |
@@ -113,7 +113,8 @@ BIW_BOOTSTRAP_ADMIN_USERNAME=admin BIW_BOOTSTRAP_ADMIN_PASSWORD='<至少 8 位>'
 | 限流阈值 | `biw.security.login-throttle.*` |
 | 会话数上限 | `application.yml` 的 `sa-token.max-login-count` |
 | 可信代理 / IP 来源 | `common/web/ClientAddress` + `server.forward-headers-strategy` |
-| 审计落库 | 实现 `AuditRecorder`，替换 `LoggingAuditRecorder` |
+| 审计落库 | `biw.audit.jdbc.enabled=true`（表已内置，prod 默认开）+ `retention` 控制保留期 |
+| 数据库最小权限 | `sql/02-app-role.sh` + `DB_USERNAME` / `DB_PASSWORD`，应用不用 schema owner 连库 |
 | 权限缓存 | 替换 `RbacAuthorities`（已是 Service，无静态调用） |
 | 乐观锁 | 给业务表加 `version` 列 + `If-Match` 请求头 |
 | 自助改密 / MFA | 新增端点，挂在 `/api/auth` 下 |

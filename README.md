@@ -10,7 +10,7 @@ Java 21 + Spring Boot 4.1.2 的 **RBAC 基座项目**：用户、角色、权限
 ## 启动
 
 ```bash
-docker compose up -d                # 建库 + 执行 sql/init.sql（表、内置角色、权限目录）
+docker compose up -d                # 建库 + 建表 + 建应用账号（见下）
 ```
 
 第一个管理员从环境变量创建，仓库里不保存任何账号或口令：
@@ -23,6 +23,12 @@ SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
 
 `BootstrapAdminRunner` 只在账号表为空时创建，账号已存在时这两个变量被忽略，所以可以一直带着它们启动。
 **首次登录后请改密。**
+
+数据库有两个角色：`biw`（镜像创建的超级用户，只用于执行 init 脚本）和 `biw_app`（应用真正连的
+角色，只有 public schema 的 DML 权限，由 `sql/02-app-role.sh` 创建）。应用配置里的
+`DB_USERNAME` / `DB_PASSWORD` 默认就是 `biw_app` / `apppass`。**升级到这套配置前已经存在的
+postgres volume 里没有这个角色**，需要 `docker compose down -v && docker compose up -d` 重建
+（数据会丢，本项目的 schema 本来就是"改文件 + 重建"）。
 
 **表结构只有一个文件：`sql/init.sql`。** 没有迁移链——这是基座项目，没有需要保留的部署历史。
 改表就改这个文件，然后 `docker compose down -v && docker compose up -d`。
