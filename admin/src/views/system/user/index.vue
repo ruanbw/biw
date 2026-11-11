@@ -126,7 +126,6 @@ const { columns, columnChecks, data, loading, pagination, getData, mobilePaginat
 
 const {
   drawerVisible,
-  openDrawer,
   closeDrawer,
   operateType,
   handleAdd,
@@ -354,13 +353,27 @@ function handleBatchDelete() {
 // ---------------------------------------------------------------
 const resetVisible = ref(false);
 const resetTargetId = ref(0);
-const resetPassword = ref('');
+/**
+ * The reset form's model.
+ *
+ * `NForm` resolves a field's value with `get(model, path)`, so the form must be given a model
+ * whose keys match the `NFormItem` paths: without it `path="newPassword"` reads `undefined` and
+ * the required rule can never pass.
+ */
+const resetModel = reactive({ newPassword: '' });
 
 function openResetPassword(id: number) {
   resetTargetId.value = id;
-  resetPassword.value = '';
+  resetModel.newPassword = '';
   resetVisible.value = true;
 }
+
+/** Closing through the modal's own controls leaves the typed password behind; drop it. */
+watch(resetVisible, visible => {
+  if (!visible) {
+    resetModel.newPassword = '';
+  }
+});
 
 async function submitResetPassword() {
   const valid = await resetFormRef.value
@@ -372,7 +385,7 @@ async function submitResetPassword() {
     return;
   }
 
-  const { error } = await fetchResetUserPassword(resetTargetId.value, { newPassword: resetPassword.value });
+  const { error } = await fetchResetUserPassword(resetTargetId.value, { newPassword: resetModel.newPassword });
 
   if (!error) {
     window.$message?.success($t('common.modifySuccess'));
@@ -431,7 +444,7 @@ const drawerTitle = computed(() =>
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
-        <NForm ref="formRef" label-placement="top" :rules="rules">
+        <NForm ref="formRef" label-placement="top" :model="formModel" :rules="rules">
           <NFormItem path="username" :label="$t('page.systemUser.username')">
             <NInput
               v-model:value="formModel.username"
@@ -477,9 +490,9 @@ const drawerTitle = computed(() =>
     </NDrawer>
 
     <NModal v-model:show="resetVisible" preset="card" class="w-400px" :title="$t('page.systemUser.resetPasswordTitle')">
-      <NForm ref="resetFormRef" label-placement="top" :rules="resetRules">
+      <NForm ref="resetFormRef" label-placement="top" :model="resetModel" :rules="resetRules">
         <NFormItem path="newPassword" :label="$t('page.systemUser.newPassword')">
-          <NInput v-model:value="resetPassword" type="password" show-password-on="click" :maxlength="64" />
+          <NInput v-model:value="resetModel.newPassword" type="password" show-password-on="click" :maxlength="64" />
         </NFormItem>
       </NForm>
       <template #footer>
